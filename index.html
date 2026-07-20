@@ -33,7 +33,15 @@ header{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(11,14,16,.
 .nav-links a:hover,.nav-links a:focus-visible{color:var(--gold)}
 .nav-phone{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--text);text-decoration:none;border:1px solid var(--line);padding:8px 14px;border-radius:4px;transition:border-color .2s}
 .nav-phone:hover{border-color:var(--copper)}
-@media(max-width:800px){.nav-links{display:none}}
+.burger{display:none;background:none;border:1px solid var(--line);border-radius:4px;color:var(--text);font-size:20px;padding:5px 12px;cursor:pointer;line-height:1}
+.burger:hover{border-color:var(--gold);color:var(--gold)}
+@media(max-width:800px){
+.nav-links{display:none;position:absolute;top:64px;left:0;right:0;background:rgba(11,14,16,.97);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);flex-direction:column;gap:0;padding:8px 24px 14px}
+.nav-links.open{display:flex}
+.nav-links a{padding:14px 0;border-bottom:1px dashed var(--line);font-size:16px}
+.nav-links a:last-child{border-bottom:none}
+.burger{display:block}
+}
 
 /* ---------- герой ---------- */
 .hero{position:relative;min-height:92vh;display:flex;align-items:center;padding-top:64px}
@@ -175,7 +183,7 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
 <header>
   <div class="wrap nav">
     <a class="logo" href="#top">AVI<span>OR</span></a>
-    <nav class="nav-links">
+    <nav class="nav-links" id="navLinks">
       <a href="#services">Услуги</a>
       <a href="#process">Как работаю</a>
       <a href="#master">Мастер</a>
@@ -183,6 +191,7 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
       <a href="#" onclick="openStatus(event)" style="color:var(--gold)">Статус ремонта</a>
     </nav>
     <a class="nav-phone" href="tel:+79000000000">+7 901 222-81-11</a>
+    <button class="burger" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Меню">☰</button>
   </div>
 </header>
 
@@ -466,6 +475,7 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
 <script>
 function openStatus(e){ if(e)e.preventDefault(); document.getElementById('statusModal').classList.add('open'); }
 function closeStatus(){ document.getElementById('statusModal').classList.remove('open'); }
+document.getElementById('navLinks').addEventListener('click',function(){this.classList.remove('open');});
 </script>
 
 <!-- LiveSklad Widget -->
