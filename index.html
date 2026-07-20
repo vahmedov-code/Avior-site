@@ -458,66 +458,29 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
   <div class="status-box">
     <button class="close" onclick="closeStatus()" aria-label="Закрыть">×</button>
     <h3>Статус ремонта</h3>
-    <div class="sub">Введите номер заказа из квитанции и телефон, указанный при приёме.</div>
-    <div class="status-form">
-      <input id="st-order" type="text" placeholder="Номер заказа, напр. AV-1024" autocomplete="off">
-      <input id="st-phone" type="tel" placeholder="Телефон: +7 ___ ___-__-__" autocomplete="off">
-      <button class="btn btn-main" onclick="checkStatus()">Проверить</button>
-      <div class="status-err" id="st-err">Заказ не найден. Проверьте номер и телефон или напишите мне напрямую.</div>
-    </div>
-    <div class="tracker" id="st-tracker">
-      <div class="order-head" id="st-head"></div>
-      <div class="device" id="st-device"></div>
-      <ul class="t-steps" id="st-steps"></ul>
-    </div>
+    <div class="sub">Введите номер телефона (указанный при приёме) или номер заказа из квитанции.</div>
+    <div id="livesklad-widget" style="display:flex;justify-content:center"></div>
   </div>
 </div>
 
 <script>
-const STAGES = ["Принят","Диагностика","Согласование","В ремонте","Готов к выдаче"];
-
 function openStatus(e){ if(e)e.preventDefault(); document.getElementById('statusModal').classList.add('open'); }
 function closeStatus(){ document.getElementById('statusModal').classList.remove('open'); }
-
-// ДЕМО-РЕЖИМ: заменить на запрос к API CRM.
-// Ожидаемый контракт: fetchStatus(order, phone) -> {device, stage: 0..4, dates: []} или null
-async function fetchStatus(order, phone){
-  if(order.trim().toUpperCase()==="AV-1024") {
-    return { device:"MacBook Air 13\" A2681", stage:2,
-      dates:["18.07.2026 14:20","18.07.2026 16:05","19.07.2026 11:30","",""] };
-  }
-  return null;
-}
-
-async function checkStatus(){
-  const order = document.getElementById('st-order').value;
-  const phone = document.getElementById('st-phone').value;
-  const err = document.getElementById('st-err');
-  const tracker = document.getElementById('st-tracker');
-  err.style.display='none'; tracker.style.display='none';
-  if(!order.trim() || !phone.trim()){ err.textContent='Заполните оба поля.'; err.style.display='block'; return; }
-  try{
-    const data = await fetchStatus(order, phone);
-    if(!data){ err.textContent='Заказ не найден. Проверьте номер и телефон или напишите мне напрямую.'; err.style.display='block'; return; }
-    document.getElementById('st-head').textContent = '// Заказ ' + order.trim().toUpperCase();
-    document.getElementById('st-device').textContent = data.device;
-    const ul = document.getElementById('st-steps'); ul.innerHTML='';
-    STAGES.forEach((name,i)=>{
-      const li = document.createElement('li');
-      if(i < data.stage) li.className='done';
-      if(i === data.stage) li.className='current';
-      li.textContent = name;
-      if(data.dates && data.dates[i]){
-        const d = document.createElement('span'); d.className='t-date'; d.textContent = data.dates[i]; li.appendChild(d);
-      }
-      ul.appendChild(li);
-    });
-    tracker.style.display='block';
-  }catch(e){
-    err.textContent='Сервис статусов временно недоступен — напишите мне напрямую.'; err.style.display='block';
-  }
-}
 </script>
+
+<!-- LiveSklad Widget -->
+<script type="text/javascript">
+window.liveskladOptions = {
+  api_key: "dbsdL6Wk8LuWt7zj7nSG"
+};
+(function() {
+  var script = document.createElement('script');
+  script.type = 'text/javascript'; script.async = true;
+  script.src = 'https://my.livesklad.com/static/widget.js';
+  document.getElementsByTagName('head')[0].appendChild(script);
+})();
+</script>
+<!-- /LiveSklad Widget -->
 
 </body>
 </html>
