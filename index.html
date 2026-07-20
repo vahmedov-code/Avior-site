@@ -435,7 +435,8 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
         <div class="c-line"><span class="k">МЕТРО</span><span>Кунцевская / Славянский бульвар</span></div>
       </div>
       <div>
-        <form onsubmit="event.preventDefault();this.querySelector('.form-note').textContent='Заявка отправлена — отвечу в течение часа в рабочее время.'">
+        <form id="leadForm" onsubmit="sendLead(event)">
+        <input type="text" name="website" id="lf-hp" style="position:absolute;left:-9999px;opacity:0" tabindex="-1" autocomplete="off">
         <div class="field">
           <label for="f-name">Имя</label>
           <input id="f-name" type="text" placeholder="Как к вам обращаться" required>
@@ -459,7 +460,7 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
         <div class="field">
           <label class="consent"><input type="checkbox" required> <span>Согласен(а) на обработку персональных данных в соответствии с <a href="privacy.html" target="_blank">политикой конфиденциальности</a></span></label>
         </div>
-        <button class="btn btn-main" type="submit">Отправить на диагностику</button>
+        <button class="btn btn-main" type="submit" id="lf-btn">Отправить на диагностику</button>
         <div class="form-note">Отвечаю лично, обычно в течение часа в рабочее время.</div>
       </form>
     </div>
@@ -487,6 +488,39 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
 function openStatus(e){ if(e)e.preventDefault(); document.getElementById('statusModal').classList.add('open'); }
 function closeStatus(){ document.getElementById('statusModal').classList.remove('open'); }
 document.getElementById('navLinks').addEventListener('click',function(){this.classList.remove('open');});
+</script>
+
+<script>
+// URL вебхука-прослойки (n8n / Cloudflare Worker). ВСТАВИТЬ РЕАЛЬНЫЙ ПОСЛЕ НАСТРОЙКИ:
+const LEAD_WEBHOOK = "PASTE_WEBHOOK_URL_HERE";
+
+async function sendLead(e){
+  e.preventDefault();
+  const form = document.getElementById('leadForm');
+  const note = form.querySelector('.form-note');
+  const btn  = document.getElementById('lf-btn');
+  if(document.getElementById('lf-hp').value){ return; } // honeypot: бот заполнил скрытое поле
+  const channelEl = form.querySelector('input[name="channel"]:checked');
+  const payload = {
+    name:  document.getElementById('f-name').value.trim(),
+    phone: document.getElementById('f-phone').value.trim(),
+    channel: channelEl ? channelEl.value : '',
+    text:  document.getElementById('f-desc').value.trim(),
+    page:  location.href,
+    ts:    new Date().toISOString()
+  };
+  if(LEAD_WEBHOOK.startsWith("PASTE")){ note.textContent='Форма ещё не подключена — напишите в Telegram или позвоните.'; return; }
+  btn.disabled = true; btn.textContent = 'Отправляю…';
+  try{
+    const r = await fetch(LEAD_WEBHOOK, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    note.textContent = 'Заявка отправлена — отвечу в течение часа в рабочее время.';
+    form.reset();
+  }catch(err){
+    note.textContent = 'Не удалось отправить — напишите в Telegram или позвоните, пожалуйста.';
+  }
+  btn.disabled = false; btn.textContent = 'Отправить на диагностику';
+}
 </script>
 
 <!-- LiveSklad Widget -->
