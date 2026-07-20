@@ -470,28 +470,20 @@ function closeStatus(){ document.getElementById('statusModal').classList.remove(
 
 <!-- LiveSklad Widget -->
 <style>
-/* попытка перекраски виджета под тему сайта (сработает, если виджет не в iframe) */
-#livesklad-widget, #livesklad-widget div{background:transparent !important;color:var(--text) !important}
-#livesklad-widget{font-family:'Manrope',sans-serif !important}
-#livesklad-widget h1,#livesklad-widget h2,#livesklad-widget h3,#livesklad-widget .title{display:none !important}
-#livesklad-widget input{background:var(--bg) !important;border:1px solid var(--line) !important;border-radius:4px !important;color:var(--text) !important;font-family:'JetBrains Mono',monospace !important;padding:12px 14px !important}
-#livesklad-widget input:focus{border-color:var(--gold) !important;outline:none !important}
-#livesklad-widget button{background:var(--gold) !important;color:#131108 !important;border:none !important;border-radius:4px !important;font-family:'JetBrains Mono',monospace !important;font-weight:600 !important;padding:13px 20px !important;cursor:pointer}
-#livesklad-widget table{color:var(--text) !important;border-color:var(--line) !important}
-#livesklad-widget td,#livesklad-widget th{border-color:var(--line) !important;background:transparent !important}
-#livesklad-widget a{color:var(--copper) !important}
+/* виджет изолирован (iframe/shadow DOM) — красим инверсией: белое→тёмное, текст→светлый */
+#livesklad-widget{filter:invert(0.93) hue-rotate(180deg);border-radius:4px;overflow:hidden}
 </style>
 <script type="text/javascript">
 window.liveskladOptions = {
   api_key: "dbsdL6Wk8LuWt7zj7nSG",
-  title: "Мои заказы",
+  title: " ",
   placeholder: "Номер телефона или заказа",
   name_placeholder: "Фамилия из квитанции",
   button_text: "Показать статус",
   width: "100%",
   height: "260px",
-  // золото сайта; ховер у кнопки отключится — это осознанно
-  color: "#e0b45c",
+  // анти-цвет: после инверсии контейнера кнопка станет золотой (#e0b45c)
+  color: "#1C4BA4",
   columns: ["number", "brand", "status", "price"],
   hide_given: true,
   currency: "руб"
