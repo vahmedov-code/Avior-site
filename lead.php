@@ -74,7 +74,7 @@ curl_setopt_array($ch, [
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_TIMEOUT        => 10,
     CURLOPT_HTTPHEADER     => [
-        'Authorization: Bearer ' . $cfg['max_token'],
+        'Authorization: ' . $cfg['max_token'],
         'Content-Type: application/json',
     ],
     CURLOPT_POSTFIELDS     => json_encode(['text' => $msg], JSON_UNESCAPED_UNICODE),
