@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /lead.php
+Disallow: /hook.php
+
+Sitemap: https://avior.moscow/sitemap.xml
