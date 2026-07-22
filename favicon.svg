@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f0c876"/>
+      <stop offset="1" stop-color="#c98a4b"/>
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="#0b0e10"/>
+  <rect x="1.5" y="1.5" width="61" height="61" rx="12.5" fill="none" stroke="#c98a4b" stroke-width="1" opacity="0.5"/>
+  <!-- дорожки платы по углам -->
+  <g stroke="#2a343c" stroke-width="1.6" fill="none" opacity="0.9">
+    <path d="M6 44 H16 L20 40 V30"/>
+    <circle cx="20" cy="30" r="1.8" fill="#0b0e10" stroke="#c98a4b"/>
+    <path d="M58 22 H48 L44 26 V36"/>
+    <circle cx="44" cy="36" r="1.8" fill="#0b0e10" stroke="#c98a4b"/>
+  </g>
+  <!-- буква A -->
+  <path d="M32 13 L48 47 H41.5 L38.4 40 H25.6 L22.5 47 H16 Z M32 22.5 L27 34.5 H37 Z"
+        fill="url(#g)"/>
+</svg>
