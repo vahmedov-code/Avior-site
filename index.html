@@ -1,6 +1,19 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<!-- Yandex.Metrika counter -->
+<script type="text/javascript">
+    (function(m,e,t,r,i,k,a){
+        m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+        m[i].l=1*new Date();
+        for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+        k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+    })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=110953361', 'ym');
+
+    ym(110953361, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+</script>
+<noscript><div><img src="https://mc.yandex.ru/watch/110953361" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+<!-- /Yandex.Metrika counter -->
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>AVIOR — компонентный ремонт электроники в Москве</title>
@@ -306,8 +319,8 @@
       <div>
         <div class="c-line"><span class="k">АДРЕС</span><span>Москва, Можайское шоссе, 4к1</span></div>
         <div class="c-line"><span class="k">РЕЖИМ</span><span>ежедневно, приём по записи</span></div>
-        <div class="c-line"><span class="k">ТЕЛЕФОН</span><span><a href="tel:+79012228111" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--copper)">+7 901 222-81-11</a></span></div>
-        <div class="c-line"><span class="k">TELEGRAM</span><span><a href="https://t.me/avior77tech" target="_blank" rel="noopener" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--copper)">@avior77tech</a></span></div>
+        <div class="c-line"><span class="k">ТЕЛЕФОН</span><span><a href="tel:+79012228111" onclick="ym(110953361,'reachGoal','phone_click')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--copper)">+7 901 222-81-11</a></span></div>
+        <div class="c-line"><span class="k">TELEGRAM</span><span><a href="https://t.me/avior77tech" target="_blank" rel="noopener" onclick="ym(110953361,'reachGoal','telegram_click')" style="color:inherit;text-decoration:none;border-bottom:1px dashed var(--copper)">@avior77tech</a></span></div>
         <div class="c-line"><span class="k">МЕТРО</span><span>Кунцевская / Славянский бульвар</span></div>
       </div>
       <div>
@@ -361,7 +374,7 @@
 </div>
 
 <script>
-function openStatus(e){ if(e)e.preventDefault(); document.getElementById('statusModal').classList.add('open'); }
+function openStatus(e){ if(e)e.preventDefault(); document.getElementById('statusModal').classList.add('open'); if(window.ym) ym(110953361,'reachGoal','status_open'); }
 function closeStatus(){ document.getElementById('statusModal').classList.remove('open'); }
 if (location.hash === '#status') { window.addEventListener('DOMContentLoaded', () => openStatus()); }
 document.getElementById('navLinks').addEventListener('click',function(){this.classList.remove('open');});
@@ -391,7 +404,7 @@ async function sendLead(e){
   try{
     const r = await fetch(LEAD_WEBHOOK, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
     if(!r.ok) throw new Error('HTTP '+r.status);
-    note.textContent = 'Заявка отправлена — отвечу в течение часа в рабочее время.';
+    note.textContent = 'Заявка отправлена — отвечу в течение часа в рабочее время.'; if(window.ym) ym(110953361,'reachGoal','lead_sent');
     form.reset();
   }catch(err){
     note.textContent = 'Не удалось отправить — напишите в Telegram или позвоните, пожалуйста.';
