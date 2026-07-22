@@ -97,11 +97,11 @@ section{padding:90px 0;border-top:1px solid var(--line)}
 .step p{font-size:15px;color:var(--muted)}
 
 /* мастер */
-.master{display:grid;grid-template-columns:300px 1fr 300px;gap:40px;align-items:start}
+.master{display:grid;grid-template-columns:300px 1fr 300px;grid-template-areas:"photo text equip";gap:40px;align-items:start}
 @media(max-width:1100px){.master{grid-template-columns:260px 1fr;grid-template-areas:"photo text" "equip equip"}}
 @media(max-width:800px){.master{grid-template-columns:1fr;grid-template-areas:"photo" "text" "equip"}}
-.master-photo{border:1px solid var(--line);background:var(--bg-2);padding:10px;grid-area:photo}
-.master-photo img{width:100%;display:block;border-radius:2px;filter:saturate(.92) contrast(1.03)}
+.master-photo{border:1px solid var(--line);background:var(--bg-2);padding:10px;grid-area:photo;max-width:300px;justify-self:start}
+.master-photo img{width:100%;height:auto;display:block;border-radius:2px;filter:saturate(.92) contrast(1.03)}
 .master-photo .cap{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--copper);letter-spacing:.1em;padding:12px 4px 2px;text-transform:uppercase}
 .master-text{grid-area:text}
 .master .equip{grid-area:equip}
