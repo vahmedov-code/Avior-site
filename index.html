@@ -97,8 +97,14 @@ section{padding:90px 0;border-top:1px solid var(--line)}
 .step p{font-size:15px;color:var(--muted)}
 
 /* мастер */
-.master{display:grid;grid-template-columns:1.1fr .9fr;gap:56px;align-items:start}
-@media(max-width:800px){.master{grid-template-columns:1fr}}
+.master{display:grid;grid-template-columns:300px 1fr 300px;gap:40px;align-items:start}
+@media(max-width:1100px){.master{grid-template-columns:260px 1fr;grid-template-areas:"photo text" "equip equip"}}
+@media(max-width:800px){.master{grid-template-columns:1fr;grid-template-areas:"photo" "text" "equip"}}
+.master-photo{border:1px solid var(--line);background:var(--bg-2);padding:10px;grid-area:photo}
+.master-photo img{width:100%;display:block;border-radius:2px;filter:saturate(.92) contrast(1.03)}
+.master-photo .cap{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--copper);letter-spacing:.1em;padding:12px 4px 2px;text-transform:uppercase}
+.master-text{grid-area:text}
+.master .equip{grid-area:equip}
 .master p{color:var(--muted);margin-bottom:16px}
 .master p strong{color:var(--text)}
 .equip{border:1px solid var(--line);background:var(--bg-2);padding:26px}
@@ -347,7 +353,14 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
       <h2>Кто будет чинить</h2>
     </div>
     <div class="master">
-      <div>
+      <div class="master-photo">
+        <picture>
+          <source srcset="master-photo.webp" type="image/webp">
+          <img src="master-photo.jpg" alt="Вейс за тринокулярным микроскопом во время диагностики платы" loading="lazy" width="760" height="1351">
+        </picture>
+        <div class="cap">// Диагностика под микроскопом</div>
+      </div>
+      <div class="master-text">
         <p><strong>Меня зовут Вейс, и AVIOR — это моя мастерская.</strong> Здесь нет менеджеров, приёмщиков и конвейера: устройство от диагностики до выдачи проходит через одни руки — мои.</p>
         <p>Специализация — компонентный ремонт: то, что сетевые сервисы называют «не подлежит ремонту», потому что у них нет времени искать сгоревший ШИМ-контроллер за 200 рублей. У меня есть.</p>
         <p>Каждую плату снимаю под микроскопом — фото диагностики и ремонта остаются в истории вашего заказа.</p>
