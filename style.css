@@ -180,4 +180,5 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
 .t-steps li .t-date{display:block;font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);font-weight:400;margin-top:2px}
 
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}.step::before{box-shadow:none}}
-.card-link{text-decoration:none;color:inherit;display:block}
+.card-link{text-decoration:none;color:inherit;display:block;height:100%}
+.grid .card{height:100%}
