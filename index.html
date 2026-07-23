@@ -384,7 +384,7 @@
     <button class="close" onclick="closeStatus()" aria-label="Закрыть">×</button>
     <h3>Статус ремонта</h3>
     <div class="sub">Введите номер телефона (указанный при приёме) или номер заказа из квитанции. Нажимая «Показать статус», вы соглашаетесь с <a href="privacy.html" target="_blank" style="color:var(--copper)">политикой обработки персональных данных</a>.</div>
-    <div id="livesklad-widget" style="display:flex;justify-content:center"></div>
+    <div class="widget-backing"><div id="livesklad-widget" style="display:flex;justify-content:center"></div></div>
   </div>
 </div>
 
@@ -448,9 +448,11 @@ async function sendLead(e){
 <style>
 /* виджет изолирован (iframe/shadow DOM) — красим инверсией: белое→тёмное, текст→светлый */
 [data-theme="dark"] #livesklad-widget{filter:invert(0.93);border-radius:4px;overflow:hidden}
+[data-theme="dark"] .widget-backing{background:#121212;border-radius:4px}
 @media (prefers-color-scheme: light){:root:not([data-theme="dark"]) #livesklad-widget{border-radius:4px;overflow:hidden}}
 [data-theme="light"] #livesklad-widget{filter:none !important;border-radius:4px;overflow:hidden}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]) #livesklad-widget{filter:invert(0.93);border-radius:4px;overflow:hidden}}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .widget-backing{background:#121212;border-radius:4px}}
 </style>
 <script type="text/javascript">
 window.liveskladOptions = {
