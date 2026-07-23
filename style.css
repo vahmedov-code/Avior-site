@@ -15,27 +15,27 @@
 @media (prefers-color-scheme: light){
   :root:not([data-theme="dark"]){
     color-scheme: light;
-    --bg:#f2ede2;
-    --bg-2:#ffffff;
-    --line:#ddd3c0;
+    --bg:#ffffff;
+    --bg-2:#f7f6f3;
+    --line:#e6e2d9;
     --copper:#a5703a;
     --gold:#b8862f;
-    --text:#201c16;
+    --text:#1a1714;
     --muted:#6e6357;
-    --bg-rgba:rgba(242,237,226,.88);
+    --bg-rgba:rgba(255,255,255,.88);
     --bg-rgba-solid:rgba(255,255,255,.97);
   }
 }
 [data-theme="light"]{
   color-scheme: light;
-  --bg:#f2ede2;
-  --bg-2:#ffffff;
-  --line:#ddd3c0;
+  --bg:#ffffff;
+  --bg-2:#f7f6f3;
+  --line:#e6e2d9;
   --copper:#a5703a;
   --gold:#b8862f;
-  --text:#201c16;
+  --text:#1a1714;
   --muted:#6e6357;
-  --bg-rgba:rgba(242,237,226,.88);
+  --bg-rgba:rgba(255,255,255,.88);
   --bg-rgba-solid:rgba(255,255,255,.97);
 }
 [data-theme="dark"]{ color-scheme: dark; }
@@ -48,12 +48,6 @@
 .theme-toggle .tt-knob{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--gold);transition:left .2s ease;box-shadow:0 0 8px rgba(224,180,92,.5)}
 [data-theme="light"] .theme-toggle .tt-knob{left:29px}
 @media(prefers-reduced-motion:reduce){.theme-toggle .tt-knob{transition:none}}
-
-/* виджет LiveSklad: инверсия только в тёмной теме (в светлой он и так белый) */
-[data-theme="dark"] @media (prefers-color-scheme: light){
-  :root:not([data-theme="dark"]) #livesklad-widget{border-radius:4px;overflow:hidden}
-}
-[data-theme="light"] #livesklad-widget{filter:none !important;border-radius:4px;overflow:hidden}
 
 /* цвета фоновой платы и прицела в герое — через переменные, чтобы менялись с темой */
 .trace-line{stroke:var(--line)}
@@ -123,8 +117,8 @@ section{padding:90px 0;border-top:1px solid var(--line)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:1px;background:var(--line);border:1px solid var(--line)}
 .card{background:var(--bg-2);padding:30px 28px;position:relative;transition:background .2s}
 .card:hover{background:#151c21}
-[data-theme="light"] .card:hover{background:#ece5d4}
-@media(prefers-color-scheme:light){:root:not([data-theme="dark"]) .card:hover{background:#ece5d4}}
+[data-theme="light"] .card:hover{background:#f0eee9}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]) .card:hover{background:#f0eee9}}
 .card .ref{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--copper);letter-spacing:.15em;margin-bottom:14px}
 .card h3{font-size:18px;font-weight:700;margin-bottom:10px}
 .card p{font-size:15px;color:var(--muted);margin-bottom:18px}
@@ -167,8 +161,8 @@ section{padding:90px 0;border-top:1px solid var(--line)}
 @media(max-width:640px){.reviews{columns:1}}
 .review{break-inside:avoid;background:var(--bg-2);border:1px solid var(--line);border-radius:4px;padding:22px;margin-bottom:20px;transition:border-color .2s}
 .review:hover{border-color:#2e3a42}
-[data-theme="light"] .review:hover{border-color:#c9bda3}
-@media(prefers-color-scheme:light){:root:not([data-theme="dark"]) .review:hover{border-color:#c9bda3}}
+[data-theme="light"] .review:hover{border-color:#d4cdbc}
+@media(prefers-color-scheme:light){:root:not([data-theme="dark"]) .review:hover{border-color:#d4cdbc}}
 .review .r-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px}
 .review .r-name{font-weight:700;font-size:14px}
 .review .stars{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--gold);letter-spacing:.1em}
