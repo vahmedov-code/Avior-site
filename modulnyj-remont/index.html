@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<script>
+(function(){
+  try{
+    var saved = localStorage.getItem('avior-theme');
+    var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', theme);
+  }catch(e){}
+})();
+</script>
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
     (function(m,e,t,r,i,k,a){
@@ -13,7 +22,8 @@
     ym(110953361, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
 </script>
 <noscript><div><img src="https://mc.yandex.ru/watch/110953361" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
-<!-- /Yandex.Metrika counter --><meta charset="UTF-8">
+<!-- /Yandex.Metrika counter -->
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Замена дисплея, батареи, разъёма зарядки в Москве | AVIOR</title>
 <meta name="description" content="Модульный ремонт: замена дисплея, аккумулятора, разъёма зарядки, камеры, динамика на смартфонах и планшетах. Оригинальные и качественные совместимые запчасти. Москва.">
@@ -121,9 +131,30 @@
       <a href="/#status" style="color:var(--gold)">Статус ремонта</a>
     </nav>
     <a class="nav-phone" href="tel:+79012228111" onclick="if(window.ym) ym(110953361,'reachGoal','phone_click')">+7 901 222-81-11</a>
+    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Переключить тему">
+      <span class="tt-icon" style="margin-left:2px">☀</span>
+      <span class="tt-icon" style="margin-right:2px">●</span>
+      <span class="tt-knob"></span>
+    </button>
     <button class="burger" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Меню">☰</button>
   </div>
 </header>
+<script>
+function toggleTheme(){
+  var current = document.documentElement.getAttribute('data-theme') || 'dark';
+  var next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try{ localStorage.setItem('avior-theme', next); }catch(e){}
+  if(window.ym) ym(110953361,'reachGoal','theme_toggle_'+next);
+}
+try{
+  if(!localStorage.getItem('avior-theme')){
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function(e){
+      document.documentElement.setAttribute('data-theme', e.matches ? 'light' : 'dark');
+    });
+  }
+}catch(e){}
+</script>
 
 <div class="svc-hero wrap">
   <div class="crumbs"><a href="/">Главная</a> / <a href="/#services">Услуги</a> / Модульный ремонт</div>
