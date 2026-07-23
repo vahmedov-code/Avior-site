@@ -131,14 +131,15 @@
       <a href="/#status" style="color:var(--gold)">Статус ремонта</a>
     </nav>
     <a class="nav-phone" href="tel:+79012228111" onclick="if(window.ym) ym(110953361,'reachGoal','phone_click')">+7 901 222-81-11</a>
-    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Переключить тему">
-      <span class="tt-icon" style="margin-left:2px">☀</span>
-      <span class="tt-icon" style="margin-right:2px">●</span>
-      <span class="tt-knob"></span>
-    </button>
     <button class="burger" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Меню">☰</button>
   </div>
 </header>
+
+<button class="theme-toggle" onclick="toggleTheme()" aria-label="Переключить тему">
+  <span class="tt-icon" style="margin-left:2px">☀</span>
+  <span class="tt-icon" style="margin-right:2px">●</span>
+  <span class="tt-knob"></span>
+</button>
 <script>
 function toggleTheme(){
   var current = document.documentElement.getAttribute('data-theme') || 'dark';
