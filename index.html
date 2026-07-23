@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
+<script>
+(function(){
+  try{
+    var saved = localStorage.getItem('avior-theme');
+    var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    document.documentElement.setAttribute('data-theme', theme);
+  }catch(e){}
+})();
+</script>
 <!-- Yandex.Metrika counter -->
 <script type="text/javascript">
     (function(m,e,t,r,i,k,a){
@@ -66,7 +75,12 @@
       <a href="#contact">Контакты</a>
       <a href="#" onclick="openStatus(event)" style="color:var(--gold)">Статус ремонта</a>
     </nav>
-    <a class="nav-phone" href="tel:+79000000000">+7 901 222-81-11</a>
+    <a class="nav-phone" href="tel:+79012228111" onclick="if(window.ym) ym(110953361,'reachGoal','phone_click')">+7 901 222-81-11</a>
+    <button class="theme-toggle" onclick="toggleTheme()" aria-label="Переключить тему">
+      <span class="tt-icon" style="margin-left:2px">☀</span>
+      <span class="tt-icon" style="margin-right:2px">●</span>
+      <span class="tt-knob"></span>
+    </button>
     <button class="burger" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Меню">☰</button>
   </div>
 </header>
@@ -74,7 +88,7 @@
 <div class="hero" id="top">
   <!-- фон: дорожки платы -->
   <svg class="traces" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <g stroke="#243038" stroke-width="2" fill="none">
+    <g class="trace-line" stroke-width="2" fill="none">
       <path d="M-20 180 H320 L400 260 H760"/>
       <path d="M-20 320 H180 L260 400 H520 L600 480 H900"/>
       <path d="M120 900 V640 L200 560 H460"/>
@@ -82,13 +96,13 @@
       <path d="M1460 560 H1180 L1100 640 H860"/>
       <path d="M700 900 V760 L780 680 H1040"/>
     </g>
-    <g fill="#0b0e10" stroke="#c98a4b" stroke-width="2">
+    <g class="trace-node" stroke-width="2">
       <circle cx="320" cy="180" r="7"/><circle cx="760" cy="260" r="7"/>
       <circle cx="520" cy="400" r="7"/><circle cx="900" cy="480" r="7"/>
       <circle cx="460" cy="560" r="7"/><circle cx="1040" cy="420" r="7"/>
       <circle cx="860" cy="640" r="7"/><circle cx="1040" cy="680" r="7"/>
     </g>
-    <g fill="#e0b45c" opacity=".9">
+    <g class="trace-dot" opacity=".9">
       <circle cx="320" cy="180" r="2.5"/><circle cx="760" cy="260" r="2.5"/>
       <circle cx="520" cy="400" r="2.5"/><circle cx="900" cy="480" r="2.5"/>
       <circle cx="460" cy="560" r="2.5"/><circle cx="1040" cy="420" r="2.5"/>
@@ -98,16 +112,16 @@
 
   <!-- прицел микроскопа -->
   <svg class="reticle" viewBox="0 0 340 340" aria-hidden="true">
-    <circle cx="170" cy="170" r="150" fill="none" stroke="#2a343c" stroke-width="1.5"/>
-    <circle cx="170" cy="170" r="100" fill="none" stroke="#2a343c" stroke-width="1"/>
-    <circle cx="170" cy="170" r="46" fill="none" stroke="#c98a4b" stroke-width="1.5"/>
-    <line x1="170" y1="0" x2="170" y2="120" stroke="#2a343c" stroke-width="1"/>
-    <line x1="170" y1="220" x2="170" y2="340" stroke="#2a343c" stroke-width="1"/>
-    <line x1="0" y1="170" x2="120" y2="170" stroke="#2a343c" stroke-width="1"/>
-    <line x1="220" y1="170" x2="340" y2="170" stroke="#2a343c" stroke-width="1"/>
-    <line x1="160" y1="170" x2="180" y2="170" stroke="#e0b45c" stroke-width="1.5"/>
-    <line x1="170" y1="160" x2="170" y2="180" stroke="#e0b45c" stroke-width="1.5"/>
-    <text x="252" y="96" font-family="JetBrains Mono, monospace" font-size="11" fill="#c98a4b">×45</text>
+    <circle class="reticle-ring" cx="170" cy="170" r="150" fill="none" stroke-width="1.5"/>
+    <circle class="reticle-ring" cx="170" cy="170" r="100" fill="none" stroke-width="1"/>
+    <circle class="reticle-ring-accent" cx="170" cy="170" r="46" fill="none" stroke-width="1.5"/>
+    <line class="reticle-ring" x1="170" y1="0" x2="170" y2="120" stroke-width="1"/>
+    <line class="reticle-ring" x1="170" y1="220" x2="170" y2="340" stroke-width="1"/>
+    <line class="reticle-ring" x1="0" y1="170" x2="120" y2="170" stroke-width="1"/>
+    <line class="reticle-ring" x1="220" y1="170" x2="340" y2="170" stroke-width="1"/>
+    <line class="reticle-cross" x1="160" y1="170" x2="180" y2="170" stroke-width="1.5"/>
+    <line class="reticle-cross" x1="170" y1="160" x2="170" y2="180" stroke-width="1.5"/>
+    <text class="reticle-label" x="252" y="96" font-family="JetBrains Mono, monospace" font-size="11">×45</text>
   </svg>
 
   <div class="wrap hero-inner">
@@ -376,6 +390,22 @@
 <script>
 function openStatus(e){ if(e)e.preventDefault(); document.getElementById('statusModal').classList.add('open'); if(window.ym) ym(110953361,'reachGoal','status_open'); }
 function closeStatus(){ document.getElementById('statusModal').classList.remove('open'); }
+
+function toggleTheme(){
+  var current = document.documentElement.getAttribute('data-theme') || 'dark';
+  var next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  try{ localStorage.setItem('avior-theme', next); }catch(e){}
+  if(window.ym) ym(110953361,'reachGoal','theme_toggle_'+next);
+}
+// если пользователь не выбирал тему вручную — следим за сменой темы устройства "на лету"
+try{
+  if(!localStorage.getItem('avior-theme')){
+    window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function(e){
+      document.documentElement.setAttribute('data-theme', e.matches ? 'light' : 'dark');
+    });
+  }
+}catch(e){}
 if (location.hash === '#status') { window.addEventListener('DOMContentLoaded', () => openStatus()); }
 document.getElementById('navLinks').addEventListener('click',function(){this.classList.remove('open');});
 </script>
@@ -416,7 +446,10 @@ async function sendLead(e){
 <!-- LiveSklad Widget -->
 <style>
 /* виджет изолирован (iframe/shadow DOM) — красим инверсией: белое→тёмное, текст→светлый */
-#livesklad-widget{filter:invert(0.93);border-radius:4px;overflow:hidden}
+[data-theme="dark"] #livesklad-widget{filter:invert(0.93);border-radius:4px;overflow:hidden}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) #livesklad-widget{border-radius:4px;overflow:hidden}}
+[data-theme="light"] #livesklad-widget{filter:none !important;border-radius:4px;overflow:hidden}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) #livesklad-widget{filter:invert(0.93);border-radius:4px;overflow:hidden}}
 </style>
 <script type="text/javascript">
 window.liveskladOptions = {
