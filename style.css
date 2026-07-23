@@ -41,11 +41,12 @@
 [data-theme="dark"]{ color-scheme: dark; }
 
 /* переключатель темы */
-.theme-toggle{display:inline-flex;align-items:center;justify-content:space-between;background:var(--bg-2);border:1px solid var(--line);border-radius:20px;padding:3px;cursor:pointer;width:52px;height:28px;position:relative;flex-shrink:0;transition:border-color .2s}
-.theme-toggle:hover{border-color:var(--copper)}
-.theme-toggle .tt-icon{width:20px;height:20px;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;z-index:1;color:var(--muted)}
-.theme-toggle .tt-knob{position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:var(--gold);transition:left .2s ease;box-shadow:0 0 8px rgba(224,180,92,.5)}
-[data-theme="light"] .theme-toggle .tt-knob{left:27px}
+.theme-toggle{position:fixed;right:20px;bottom:20px;z-index:60;display:inline-flex;align-items:center;justify-content:space-between;background:var(--bg-2);border:1px solid var(--line);border-radius:20px;padding:3px;cursor:pointer;width:56px;height:30px;flex-shrink:0;transition:border-color .2s,transform .15s;box-shadow:0 6px 20px rgba(0,0,0,.35)}
+.theme-toggle:hover{border-color:var(--copper);transform:translateY(-2px)}
+@media(max-width:480px){.theme-toggle{right:14px;bottom:14px}}
+.theme-toggle .tt-icon{width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:12px;line-height:1;z-index:1;color:var(--muted)}
+.theme-toggle .tt-knob{position:absolute;top:3px;left:3px;width:22px;height:22px;border-radius:50%;background:var(--gold);transition:left .2s ease;box-shadow:0 0 8px rgba(224,180,92,.5)}
+[data-theme="light"] .theme-toggle .tt-knob{left:29px}
 @media(prefers-reduced-motion:reduce){.theme-toggle .tt-knob{transition:none}}
 
 /* виджет LiveSklad: инверсия только в тёмной теме (в светлой он и так белый) */
