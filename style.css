@@ -239,3 +239,6 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
 .pay-badges{display:flex;flex-wrap:wrap;gap:8px;margin-top:2px}
 .pay-badge{display:inline-flex;align-items:center;gap:6px;font-family:'JetBrains Mono',monospace;font-size:12px;border:1px solid var(--line);border-radius:20px;padding:5px 12px 5px 8px;color:var(--text);background:var(--bg-2)}
 .pay-badge svg{flex-shrink:0;stroke:var(--copper)}
+.svc-photo{border:1px solid var(--line);background:var(--bg-2);padding:10px;margin:36px 0}
+.svc-photo img{width:100%;height:auto;display:block;border-radius:2px}
+.svc-photo .cap{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--copper);letter-spacing:.1em;padding:12px 4px 2px;text-transform:uppercase}
