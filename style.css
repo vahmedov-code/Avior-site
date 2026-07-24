@@ -181,7 +181,8 @@ section{padding:90px 0;border-top:1px solid var(--line)}
 .contact{display:grid;grid-template-columns:1fr 1fr;gap:56px}
 @media(max-width:800px){.contact{grid-template-columns:1fr}}
 .c-line{display:flex;gap:14px;padding:14px 0;border-bottom:1px dashed var(--line);font-size:15px}
-.c-line .k{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--copper);min-width:90px;padding-top:2px;letter-spacing:.1em}
+.c-line .k{font-family:'JetBrains Mono',monospace;font-size:12px;color:var(--copper);min-width:90px;padding-top:2px;letter-spacing:.1em;display:flex;align-items:center;gap:8px}
+.c-line .k svg{flex-shrink:0;stroke:var(--copper)}
 form .field{margin-bottom:16px}
 form label{display:block;font-family:'JetBrains Mono',monospace;font-size:11px;letter-spacing:.15em;color:var(--muted);margin-bottom:6px;text-transform:uppercase}
 form input,form textarea{width:100%;background:var(--bg-2);border:1px solid var(--line);border-radius:4px;padding:12px 14px;color:var(--text);font-family:'Manrope',sans-serif;font-size:15px;transition:border-color .2s}
