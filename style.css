@@ -119,7 +119,8 @@ section{padding:90px 0;border-top:1px solid var(--line)}
 .card:hover{background:#151c21}
 [data-theme="light"] .card:hover{background:#f0eee9}
 @media(prefers-color-scheme:light){:root:not([data-theme="dark"]) .card:hover{background:#f0eee9}}
-.card .ref{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--copper);letter-spacing:.15em;margin-bottom:14px}
+.card .ref{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--copper);letter-spacing:.15em;margin-bottom:14px;display:flex;align-items:center;gap:10px}
+.card .ref svg{flex-shrink:0;stroke:var(--copper)}
 .card h3{font-size:18px;font-weight:700;margin-bottom:10px}
 .card p{font-size:15px;color:var(--muted);margin-bottom:18px}
 .card .price{font-family:'JetBrains Mono',monospace;font-size:14px;color:var(--gold)}
@@ -242,5 +243,3 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
 .svc-photo{border:1px solid var(--line);background:var(--bg-2);padding:10px;margin:36px 0}
 .svc-photo img{width:100%;height:auto;display:block;border-radius:2px}
 .svc-photo .cap{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--copper);letter-spacing:.1em;padding:12px 4px 2px;text-transform:uppercase}
-.card .svc-icon{margin-bottom:16px}
-.card .svc-icon svg{stroke:var(--copper)}
