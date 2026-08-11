@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<yml_catalog date="2026-08-11 12:00">
+<yml_catalog date="2026-08-11 14:00">
   <shop>
     <name>AVIOR</name>
     <company>AVIOR — компонентный ремонт электроники</company>
@@ -25,6 +25,7 @@
         <price>2500</price>
         <currencyId>RUB</currencyId>
         <categoryId>1</categoryId>
+        <picture>https://avior.moscow/plata-photo.jpg</picture>
         <url>https://avior.moscow/remont-materinskih-plat/</url>
         <description>Диагностика по схеме, замена контроллеров питания, восстановление после жидкости и КЗ. Ноутбуки, смартфоны, планшеты. Диагностика бесплатно при ремонте.</description>
       </offer>
@@ -33,6 +34,7 @@
         <price>4000</price>
         <currencyId>RUB</currencyId>
         <categoryId>2</categoryId>
+        <picture>https://avior.moscow/bga-photo.jpg</picture>
         <url>https://avior.moscow/bga-pajka/</url>
         <description>Замена и перекатка видеочипов, процессоров, памяти, контроллеров. Нижний подогрев, трафареты, контроль профиля пайки.</description>
       </offer>
@@ -41,6 +43,7 @@
         <price>3000</price>
         <currencyId>RUB</currencyId>
         <categoryId>3</categoryId>
+        <picture>https://avior.moscow/glass-photo.jpg</picture>
         <url>https://avior.moscow/pereklejka-stekla/</url>
         <description>Замена стекла с сохранением родной матрицы смартфона или планшета: сепарация, OCA-плёнка, автоклав.</description>
       </offer>
@@ -49,6 +52,7 @@
         <price>1500</price>
         <currencyId>RUB</currencyId>
         <categoryId>4</categoryId>
+        <picture>https://avior.moscow/modul-photo.jpg</picture>
         <url>https://avior.moscow/modulnyj-remont/</url>
         <description>Дисплеи, аккумуляторы, разъёмы зарядки, камеры, динамики. Оригинальные и качественные совместимые запчасти на выбор.</description>
       </offer>
@@ -57,22 +61,25 @@
         <price>2000</price>
         <currencyId>RUB</currencyId>
         <categoryId>5</categoryId>
+        <picture>https://avior.moscow/pcbuild-photo.jpg</picture>
         <url>https://avior.moscow/sborka-apgrejd-pk/</url>
         <description>Игровой ПК или рабочая станция под задачу и бюджет. Подбор компонентов, апгрейд имеющейся сборки, чистка и обслуживание.</description>
       </offer>
       <offer id="6" available="true">
         <name>Спасение данных</name>
-        <price>0</price>
+        <price>3000</price>
         <currencyId>RUB</currencyId>
         <categoryId>6</categoryId>
+        <picture>https://avior.moscow/dannye-photo.jpg</picture>
         <url>https://avior.moscow/spasenie-dannyh/</url>
-        <description>Восстановление доступа к данным с устройств, которые не включаются: ремонт платы до состояния «считать и сохранить». Цена по результатам диагностики.</description>
+        <description>Восстановление доступа к данным с устройств, которые не включаются: ремонт платы до состояния «считать и сохранить». Цена от 3000 ₽, точная — по результатам диагностики.</description>
       </offer>
       <offer id="7" available="true">
         <name>Обслуживание охлаждения игровых ноутбуков</name>
         <price>6000</price>
         <currencyId>RUB</currencyId>
         <categoryId>7</categoryId>
+        <picture>https://avior.moscow/cooling-photo.jpg</picture>
         <url>https://avior.moscow/obsluzhivanie-ohlazhdeniya-noutbukov/</url>
         <description>Чистка, фазовый термопереход Laird на CPU/GPU, жидкие термопрокладки Denka на VRM и память — премиальные материалы вместо обычной пасты.</description>
       </offer>
@@ -81,6 +88,7 @@
         <price>2500</price>
         <currencyId>RUB</currencyId>
         <categoryId>8</categoryId>
+        <picture>https://avior.moscow/pristavka-photo.jpg</picture>
         <url>https://avior.moscow/remont-igrovyh-pristavok/</url>
         <description>PS5, PS4, Xbox, Steam Deck, ASUS ROG Ally — чистка от пыли, термопаста. Ремонт геймпадов: стик-дрифт, кнопки, разъёмы зарядки.</description>
       </offer>
@@ -89,6 +97,7 @@
         <price>3000</price>
         <currencyId>RUB</currencyId>
         <categoryId>9</categoryId>
+        <picture>https://avior.moscow/monoblok-photo.jpg</picture>
         <url>https://avior.moscow/remont-monoblokov/</url>
         <description>Диагностика платы, замена накопителя на SSD, чистка охлаждения, ремонт после жидкости. Apple iMac и PC-моноблоки.</description>
       </offer>
