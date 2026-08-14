@@ -258,7 +258,9 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
 .mp-track{display:flex;transition:transform .5s cubic-bezier(.4,0,.2,1)}
 .mp-slide{flex:0 0 100%;width:100%}
 .mp-slide img{width:100%;height:auto;display:block;border-radius:2px;filter:saturate(.92) contrast(1.03)}
-.mp-arrow{position:absolute;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:rgba(11,14,16,.55);backdrop-filter:blur(4px);color:#fff;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,border-color .2s}
+.mp-arrow{position:absolute;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:rgba(11,14,16,.55);backdrop-filter:blur(4px);color:#fff;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;opacity:0;transition:background .2s,border-color .2s,opacity .2s;pointer-events:none}
+.mp-carousel:hover .mp-arrow{opacity:1;pointer-events:auto}
+@media(hover:none){.mp-arrow{display:none}}
 [data-theme="light"] .mp-arrow{background:rgba(255,255,255,.7);color:#222}
 .mp-arrow:hover{border-color:var(--gold)}
 .mp-prev{left:8px}
