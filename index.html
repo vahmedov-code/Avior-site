@@ -247,11 +247,43 @@
     </div>
     <div class="master">
       <div class="master-photo">
-        <picture>
-          <source srcset="master-photo.webp" type="image/webp">
-          <img src="master-photo.jpg" alt="Вейс за тринокулярным микроскопом во время диагностики платы" loading="lazy" width="760" height="1351">
-        </picture>
-        <div class="cap">// Диагностика под микроскопом</div>
+        <div class="mp-carousel" id="mpCarousel">
+          <div class="mp-track" id="mpTrack">
+            <div class="mp-slide">
+              <picture>
+                <source srcset="master-photo-1.webp" type="image/webp">
+                <img src="master-photo-1.jpg" alt="Вейс в мастерской AVIOR за рабочим местом" loading="lazy" width="760" height="950">
+              </picture>
+            </div>
+            <div class="mp-slide">
+              <picture>
+                <source srcset="master-photo-2.webp" type="image/webp">
+                <img src="master-photo-2.jpg" alt="Рабочий стол мастерской AVIOR с оборудованием" loading="lazy" width="760" height="950">
+              </picture>
+            </div>
+            <div class="mp-slide">
+              <picture>
+                <source srcset="master-photo-3.webp" type="image/webp">
+                <img src="master-photo-3.jpg" alt="Второй рабочий стол мастерской AVIOR с инструментами" loading="lazy" width="760" height="950">
+              </picture>
+            </div>
+            <div class="mp-slide">
+              <picture>
+                <source srcset="master-photo-4.webp" type="image/webp">
+                <img src="master-photo-4.jpg" alt="Вейс за тринокулярным микроскопом во время диагностики платы" loading="lazy" width="760" height="950">
+              </picture>
+            </div>
+          </div>
+          <button class="mp-arrow mp-prev" onclick="mpGo(-1)" aria-label="Предыдущее фото">‹</button>
+          <button class="mp-arrow mp-next" onclick="mpGo(1)" aria-label="Следующее фото">›</button>
+          <div class="mp-dots" id="mpDots">
+            <button class="mp-dot active" onclick="mpGoTo(0)" aria-label="Фото 1"></button>
+            <button class="mp-dot" onclick="mpGoTo(1)" aria-label="Фото 2"></button>
+            <button class="mp-dot" onclick="mpGoTo(2)" aria-label="Фото 3"></button>
+            <button class="mp-dot" onclick="mpGoTo(3)" aria-label="Фото 4"></button>
+          </div>
+        </div>
+        <div class="cap">// В мастерской AVIOR</div>
       </div>
       <div class="master-text">
         <p><strong>Меня зовут Вейс, и AVIOR — это моя мастерская.</strong> Здесь нет менеджеров, приёмщиков и конвейера: устройство от диагностики до выдачи проходит через одни руки — мои.</p>
@@ -642,5 +674,67 @@ window.liveskladOptions = {
   requestAnimationFrame(tick);
 })();
 </script>
+
+<script>
+(function(){
+  var track = document.getElementById('mpTrack');
+  var carousel = document.getElementById('mpCarousel');
+  if(!track || !carousel) return;
+  var dots = carousel.querySelectorAll('.mp-dot');
+  var slides = carousel.querySelectorAll('.mp-slide');
+  var count = slides.length;
+  var idx = 0;
+  var AUTOPLAY_MS = 4000;
+  var timer = null;
+
+  function render(){
+    track.style.transform = 'translateX(-' + (idx*100) + '%)';
+    dots.forEach(function(d,i){ d.classList.toggle('active', i===idx); });
+  }
+  function goTo(i){
+    idx = ((i % count) + count) % count;
+    render();
+  }
+  window.mpGo = function(delta){ goTo(idx+delta); restart(); };
+  window.mpGoTo = function(i){ goTo(i); restart(); };
+
+  function start(){
+    timer = setInterval(function(){ goTo(idx+1); }, AUTOPLAY_MS);
+  }
+  function stop(){ if(timer){ clearInterval(timer); timer=null; } }
+  function restart(){ stop(); start(); }
+
+  // свайп/драг
+  var startX = 0, deltaX = 0, dragging = false;
+  function pointerDown(x){ dragging = true; startX = x; deltaX = 0; stop(); track.style.transition = 'none'; }
+  function pointerMove(x){ if(!dragging) return; deltaX = x - startX; var pct = (deltaX / carousel.offsetWidth) * 100; track.style.transform = 'translateX(calc(-' + (idx*100) + '% + ' + deltaX + 'px))'; }
+  function pointerUp(){
+    if(!dragging) return;
+    dragging = false;
+    track.style.transition = '';
+    if(Math.abs(deltaX) > carousel.offsetWidth * 0.15){
+      goTo(idx + (deltaX < 0 ? 1 : -1));
+    } else {
+      render();
+    }
+    restart();
+  }
+
+  carousel.addEventListener('touchstart', function(e){ pointerDown(e.touches[0].clientX); }, {passive:true});
+  carousel.addEventListener('touchmove', function(e){ pointerMove(e.touches[0].clientX); }, {passive:true});
+  carousel.addEventListener('touchend', pointerUp);
+
+  carousel.addEventListener('mousedown', function(e){ pointerDown(e.clientX); e.preventDefault(); });
+  window.addEventListener('mousemove', function(e){ pointerMove(e.clientX); });
+  window.addEventListener('mouseup', pointerUp);
+
+  carousel.addEventListener('mouseenter', stop);
+  carousel.addEventListener('mouseleave', restart);
+
+  render();
+  start();
+})();
+</script>
+
 </body>
 </html>
