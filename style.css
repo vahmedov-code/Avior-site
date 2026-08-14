@@ -252,3 +252,18 @@ footer.site{border-top:1px solid var(--line);padding:28px 0;display:block}
 .svc-photo .cap{font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--copper);letter-spacing:.1em;padding:12px 4px 2px;text-transform:uppercase}
 #heroParticles{position:absolute;inset:0;z-index:1;pointer-events:none;display:block}
 @media(prefers-reduced-motion:reduce){#heroParticles{display:none}}
+
+/* карусель фото мастера */
+.mp-carousel{position:relative;overflow:hidden;border-radius:2px}
+.mp-track{display:flex;transition:transform .5s cubic-bezier(.4,0,.2,1)}
+.mp-slide{flex:0 0 100%;width:100%}
+.mp-slide img{width:100%;height:auto;display:block;border-radius:2px;filter:saturate(.92) contrast(1.03)}
+.mp-arrow{position:absolute;top:50%;transform:translateY(-50%);width:32px;height:32px;border-radius:50%;border:1px solid var(--line);background:rgba(11,14,16,.55);backdrop-filter:blur(4px);color:#fff;font-size:18px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,border-color .2s}
+[data-theme="light"] .mp-arrow{background:rgba(255,255,255,.7);color:#222}
+.mp-arrow:hover{border-color:var(--gold)}
+.mp-prev{left:8px}
+.mp-next{right:8px}
+.mp-dots{position:absolute;left:0;right:0;bottom:10px;display:flex;justify-content:center;gap:7px}
+.mp-dot{width:7px;height:7px;border-radius:50%;border:none;background:rgba(255,255,255,.4);cursor:pointer;padding:0;transition:background .2s,transform .2s}
+[data-theme="light"] .mp-dot{background:rgba(0,0,0,.25)}
+.mp-dot.active{background:var(--gold);transform:scale(1.3)}
