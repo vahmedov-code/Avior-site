@@ -165,7 +165,7 @@ try{
   <div class="price-box"><b>от 1 500 ₽</b><span>зависит от модели и типа запчасти</span></div>
   <div class="devices"><span>Смартфоны всех брендов</span><span>Планшеты</span><span>Разъёмы Lightning/USB-C</span><span>Аккумуляторы</span><span>Камеры и динамики</span></div>
   <div class="cta-row" style="margin-top:30px">
-    <a class="btn btn-main" href="/#contact">Оценить ремонт</a>
+    <a class="btn btn-main" href="#lead">Оценить ремонт</a>
     <a class="btn btn-ghost" href="/#status">Статус ремонта</a>
   </div>
 </div>
@@ -231,12 +231,39 @@ try{
   </div>
 </section>
 
-<section>
+<section id="lead">
   <div class="wrap">
-    <div class="svc-cta">
-      <h2>Диагностика перед ремонтом — бесплатно</h2>
-      <p>Опишите проблему — отвечу с ориентировочной ценой в течение часа в рабочее время.</p>
-      <a class="btn btn-main" href="/#contact">Оставить заявку</a>
+    <div class="svc-cta" style="text-align:left">
+      <h2 style="text-align:center">Диагностика модуля — бесплатно</h2>
+      <p style="text-align:center">Опишите, что не работает — отвечу с ориентировочной ценой.</p>
+      <form id="leadForm" onsubmit="sendLead(event)" style="max-width:520px;margin:0 auto">
+        <input type="text" name="website" id="lf-hp" style="position:absolute;left:-9999px;opacity:0" tabindex="-1" autocomplete="off">
+        <div class="field">
+          <label for="f-name">Имя</label>
+          <input id="f-name" type="text" placeholder="Как к вам обращаться" required>
+        </div>
+        <div class="field">
+          <label for="f-phone">Телефон или ник в мессенджере</label>
+          <input id="f-phone" type="text" placeholder="+7 ___ ___-__-__ или @ник" required>
+        </div>
+        <div class="field">
+          <label>Как удобнее получить ответ</label>
+          <div class="chips">
+            <label class="chip"><input type="radio" name="channel" value="telegram" checked><span>Telegram</span></label>
+            <label class="chip"><input type="radio" name="channel" value="max"><span>MAX</span></label>
+            <label class="chip"><input type="radio" name="channel" value="call"><span>Звонок</span></label>
+          </div>
+        </div>
+        <div class="field">
+          <label for="f-desc">Что случилось с устройством</label>
+          <textarea id="f-desc" placeholder="Модель устройства и что с ним">Модульный ремонт: </textarea>
+        </div>
+        <div class="field">
+          <label class="consent"><input type="checkbox" required> <span>Согласен(а) на обработку персональных данных в соответствии с <a href="/privacy.html" target="_blank">политикой конфиденциальности</a></span></label>
+        </div>
+        <button class="btn btn-main" type="submit" id="lf-btn" style="width:100%">Отправить на диагностику</button>
+        <div class="form-note" style="text-align:center">Отвечаю лично, обычно в течение часа в рабочее время.</div>
+      </form>
     </div>
   </div>
 </section>
@@ -249,5 +276,36 @@ try{
   </div>
 </footer>
 
+
+<script>
+const LEAD_WEBHOOK = "https://avior.moscow/lead.php";
+async function sendLead(e){
+  e.preventDefault();
+  const form = document.getElementById('leadForm');
+  const note = form.querySelector('.form-note');
+  const btn  = document.getElementById('lf-btn');
+  if(document.getElementById('lf-hp').value){ return; }
+  const channelEl = form.querySelector('input[name="channel"]:checked');
+  const payload = {
+    name:  document.getElementById('f-name').value.trim(),
+    phone: document.getElementById('f-phone').value.trim(),
+    channel: channelEl ? channelEl.value : '',
+    text:  document.getElementById('f-desc').value.trim(),
+    page:  location.href,
+    ts:    new Date().toISOString()
+  };
+  if(LEAD_WEBHOOK.startsWith("PASTE")){ note.textContent='Форма ещё не подключена — напишите в Telegram или позвоните.'; return; }
+  btn.disabled = true; btn.textContent = 'Отправляю…';
+  try{
+    const r = await fetch(LEAD_WEBHOOK, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
+    if(!r.ok) throw new Error('HTTP '+r.status);
+    note.textContent = 'Заявка отправлена — отвечу в течение часа в рабочее время.'; if(window.ym) ym(110953361,'reachGoal','lead_sent');
+    form.reset();
+  }catch(err){
+    note.textContent = 'Не удалось отправить — напишите в Telegram или позвоните, пожалуйста.';
+  }
+  btn.disabled = false; btn.textContent = 'Отправить на диагностику';
+}
+</script>
 </body>
 </html>
