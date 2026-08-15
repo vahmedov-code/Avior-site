@@ -460,10 +460,60 @@
   <div class="status-box">
     <button class="close" onclick="closeStatus()" aria-label="Закрыть">×</button>
     <h3>Статус ремонта</h3>
-    <div class="sub">Введите номер телефона (указанный при приёме) или номер заказа из квитанции. Нажимая «Показать статус», вы соглашаетесь с <a href="privacy.html" target="_blank" style="color:var(--copper)">политикой обработки персональных данных</a>.</div>
-    <div class="widget-backing"><div id="livesklad-widget" style="display:flex;justify-content:center"></div></div>
+    <div class="sub">Введите номер заказа из квитанции и телефон, указанный при приёме. Нажимая «Показать статус», вы соглашаетесь с <a href="privacy.html" target="_blank" style="color:var(--copper)">политикой обработки персональных данных</a>.</div>
+    <form id="statusForm" onsubmit="checkStatus(event)">
+      <div class="field">
+        <label for="st-order">Номер заказа</label>
+        <input id="st-order" type="text" placeholder="Например, 26-001" required>
+      </div>
+      <div class="field">
+        <label for="st-phone">Телефон</label>
+        <input id="st-phone" type="text" placeholder="+7 ___ ___-__-__" required>
+      </div>
+      <button type="submit" id="st-btn" class="btn-primary" style="width:100%;padding:12px;border:none;border-radius:4px;background:var(--gold);color:#1a1200;font-weight:700;cursor:pointer;font-family:'JetBrains Mono',monospace;font-size:14px;">Показать статус</button>
+    </form>
+    <div id="st-result" style="margin-top:16px;font-size:14px;"></div>
   </div>
 </div>
+
+<script>
+// Свой статус-API (CMS АВИОР) — заменяет LiveSklad-виджет, т.к. заказы
+// теперь ведутся в собственной CMS, а не в LiveSklad.
+const STATUS_API = "https://cms.avior.moscow/api/status.php";
+
+async function checkStatus(e){
+  e.preventDefault();
+  const orderNo = document.getElementById('st-order').value.trim();
+  const phone = document.getElementById('st-phone').value.trim();
+  const btn = document.getElementById('st-btn');
+  const result = document.getElementById('st-result');
+
+  result.textContent = 'Проверяем…';
+  result.style.color = 'var(--muted)';
+  btn.disabled = true;
+
+  try{
+    const r = await fetch(STATUS_API + '?order_no=' + encodeURIComponent(orderNo) + '&phone=' + encodeURIComponent(phone));
+    const data = await r.json();
+    if (data.found) {
+      result.style.color = 'var(--text)';
+      result.innerHTML = '<div style="border:1px solid var(--line);border-radius:4px;padding:14px 16px;background:var(--bg-2);">'
+        + '<div style="font-family:\'JetBrains Mono\',monospace;font-size:12px;color:var(--copper);text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;">Заказ ' + data.order_no + '</div>'
+        + '<div style="margin-bottom:6px;">' + data.device + '</div>'
+        + '<div style="font-weight:700;color:var(--gold);">Статус: ' + data.status + '</div>'
+        + '</div>';
+      if (window.ym) ym(110953361,'reachGoal','status_found');
+    } else {
+      result.style.color = 'var(--muted)';
+      result.textContent = 'Заказ не найден. Проверьте номер заказа и телефон.';
+    }
+  } catch (err) {
+    result.style.color = 'var(--muted)';
+    result.textContent = 'Не удалось получить статус. Попробуйте позже.';
+  }
+  btn.disabled = false;
+}
+</script>
 
 <script>
 function openStatus(e){ if(e)e.preventDefault(); document.getElementById('statusModal').classList.add('open'); if(window.ym) ym(110953361,'reachGoal','status_open'); }
@@ -537,40 +587,6 @@ async function sendLead(e){
   btn.disabled = false; btn.textContent = 'Отправить на диагностику';
 }
 </script>
-
-<!-- LiveSklad Widget -->
-<style>
-/* виджет изолирован (iframe/shadow DOM) — красим инверсией: белое→тёмное, текст→светлый */
-[data-theme="dark"] #livesklad-widget{filter:invert(0.93);border-radius:4px;overflow:hidden}
-[data-theme="dark"] .widget-backing{background:#121212;border-radius:4px}
-@media (prefers-color-scheme: light){:root:not([data-theme="dark"]) #livesklad-widget{border-radius:4px;overflow:hidden}}
-[data-theme="light"] #livesklad-widget{filter:none !important;border-radius:4px;overflow:hidden}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) #livesklad-widget{filter:invert(0.93);border-radius:4px;overflow:hidden}}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .widget-backing{background:#121212;border-radius:4px}}
-</style>
-<script type="text/javascript">
-window.liveskladOptions = {
-  api_key: "dbsdL6Wk8LuWt7zj7nSG",
-  title: " ",
-  placeholder: "Номер телефона или заказа",
-  name_placeholder: "Фамилия из квитанции",
-  button_text: "Показать статус",
-  width: "100%",
-  height: "260px",
-  // анти-цвет: после инверсии контейнера кнопка станет золотой (#e0b45c)
-  color: "#1C4BA4",
-  columns: ["number", "brand", "status", "price"],
-  hide_given: true,
-  currency: "руб"
-};
-(function() {
-  var script = document.createElement('script');
-  script.type = 'text/javascript'; script.async = true;
-  script.src = 'https://my.livesklad.com/static/widget.js';
-  document.getElementsByTagName('head')[0].appendChild(script);
-})();
-</script>
-<!-- /LiveSklad Widget -->
 
 <script>
 (function(){
