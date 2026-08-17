@@ -86,6 +86,38 @@ curl_close($ch);
 
 $ok = ($code >= 200 && $code < 300);
 
+// --- параллельно: создаём заказ прямо в CRM (независимо от MAX выше —
+// если CRM недоступна, заявка всё равно долетит в MAX как раньше, эта
+// часть best-effort и не влияет на ответ сайту клиенту). Секрет —
+// $cfg['crm_lead_secret'], тот же самый, что в CRM → Настройки → «Приём
+// заявок с сайта» — если поменяете один, обновите и второй. ---
+if (!empty($cfg['crm_lead_secret'])) {
+    $crmCh = curl_init('https://cms.avior.moscow/api/lead_intake.php');
+    curl_setopt_array($crmCh, [
+        CURLOPT_POST           => true,
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 8,
+        CURLOPT_HTTPHEADER     => [
+            'X-Lead-Secret: ' . $cfg['crm_lead_secret'],
+            'Content-Type: application/json',
+        ],
+        CURLOPT_POSTFIELDS     => json_encode([
+            'name'    => $name,
+            'phone'   => $phone,
+            'text'    => $text,
+            'channel' => $channel,
+        ], JSON_UNESCAPED_UNICODE),
+    ]);
+    $crmResp = curl_exec($crmCh);
+    $crmCode = curl_getinfo($crmCh, CURLINFO_HTTP_CODE);
+    curl_close($crmCh);
+    @file_put_contents(
+        __DIR__ . '/leads.log',
+        date('c') . " | CRM intake | http={$crmCode} | {$crmResp}\n",
+        FILE_APPEND | LOCK_EX
+    );
+}
+
 // --- лог (пригодится при отладке; чистить раз в пару месяцев) ---
 $line = date('c') . " | ip={$ip} | http={$code} | " . str_replace("\n", ' / ', $msg)
       . ($ok ? '' : " | ERR: {$err} {$resp}") . "\n";
