@@ -21,6 +21,21 @@
     position:absolute;bottom:16px;left:16px;background:rgba(28,36,54,.85);color:#fff;
     padding:8px 14px;border-radius:8px;font-size:12.5px;z-index:5;
   }
+  /* Фирменный маркер АВИОР — бейдж вместо стандартной капли,
+     плюс маленький «хвостик»-указатель снизу слева (псевдоэлемент). */
+  .avior-pin{
+    background:#1c2436;
+    border:2px solid #e0b45c;
+    border-radius:8px 8px 8px 2px;
+    padding:7px 13px;
+    box-shadow:0 3px 10px rgba(0,0,0,.4);
+    color:#e0b45c;
+    font-weight:800;
+    font-size:13px;
+    letter-spacing:.03em;
+    white-space:nowrap;
+    cursor:pointer;
+  }
 </style>
 </head>
 <body>
@@ -28,7 +43,7 @@
 <div class="bar">
   <div>
     <h1>Демо: 3D-карта без платного API</h1>
-    <p>MapLibre GL JS + OpenFreeMap · район Можайского шоссе, Москва</p>
+    <p>MapLibre GL JS + OpenFreeMap · Можайское шоссе, 4к1, Москва</p>
   </div>
   <span class="badge">0 ₽ / без лимита</span>
 </div>
@@ -40,11 +55,15 @@
 
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.3.0/dist/maplibre-gl.js" crossorigin="anonymous"></script>
 <script>
+  // Точные координаты — с карточки дома на Яндекс Картах (Можайское
+  // шоссе, 4к1), не приблизительная оценка, как было раньше.
+  const AVIOR_COORDS = [37.443721, 55.723146];
+
   const map = new maplibregl.Map({
     container: 'map',
     style: 'https://tiles.openfreemap.org/styles/liberty',
-    center: [37.4468, 55.7295],
-    zoom: 16.5,
+    center: AVIOR_COORDS,
+    zoom: 17,
     pitch: 60,
     bearing: -20,
     antialias: true
@@ -52,9 +71,15 @@
 
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
 
-  new maplibregl.Marker({ color: '#e0b45c' })
-    .setLngLat([37.4468, 55.7295])
-    .setPopup(new maplibregl.Popup().setHTML('<b>АВИОР</b><br>Можайское шоссе, 4к1, Москва'))
+  // Кастомный маркер вместо стандартной капли — фирменный бейдж
+  // навигационного цвета с золотой рамкой, как в остальном интерфейсе.
+  const pinEl = document.createElement('div');
+  pinEl.className = 'avior-pin';
+  pinEl.textContent = 'АВИОР';
+
+  new maplibregl.Marker({ element: pinEl, anchor: 'bottom-left' })
+    .setLngLat(AVIOR_COORDS)
+    .setPopup(new maplibregl.Popup({ offset: 12 }).setHTML('<b>АВИОР</b><br>Можайское шоссе, 4к1, Москва'))
     .addTo(map);
 </script>
 
