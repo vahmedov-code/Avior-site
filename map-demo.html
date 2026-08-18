@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Демо: бесплатная 3D-карта (MapLibre + OpenFreeMap)</title>
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@5.3.0/dist/maplibre-gl.css" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:-apple-system,'Segoe UI',sans-serif;background:#1c2436;}
+  .bar{
+    background:#1c2436;color:#fff;padding:14px 18px;display:flex;
+    justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;
+    border-bottom:3px solid #e0b45c;
+  }
+  .bar h1{font-size:16px;margin:0;}
+  .bar p{margin:2px 0 0;font-size:12px;color:#c7cee0;}
+  .bar .badge{background:#e0b45c;color:#1c2436;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;}
+  #map{width:100%;height:calc(100vh - 66px);background:#2a3550;}
+  .hint{
+    position:absolute;bottom:16px;left:16px;background:rgba(28,36,54,.85);color:#fff;
+    padding:8px 14px;border-radius:8px;font-size:12.5px;z-index:5;
+  }
+  #diag{
+    position:absolute;top:12px;left:12px;right:12px;background:rgba(178,52,40,.95);color:#fff;
+    padding:12px 16px;border-radius:8px;font-size:13px;line-height:1.6;z-index:20;
+    display:none;word-break:break-word;
+  }
+  #diag b{display:block;margin-bottom:4px;}
+  #diag code{background:rgba(0,0,0,.25);padding:2px 5px;border-radius:4px;font-size:12px;}
+  #status{
+    position:absolute;top:12px;right:12px;background:rgba(0,0,0,.5);color:#9fe6a0;
+    padding:5px 10px;border-radius:6px;font-size:11px;z-index:6;font-family:monospace;
+  }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <div>
+    <h1>Демо: 3D-карта без платного API</h1>
+    <p>MapLibre GL JS + OpenFreeMap · район Можайского шоссе, Москва</p>
+  </div>
+  <span class="badge">0 ₽ / без лимита</span>
+</div>
+
+<div style="position:relative;">
+  <div id="map"></div>
+  <div class="hint">🖱 Зажми правую кнопку (или два пальца) и потяни — покрутишь и наклонишь вид</div>
+  <div id="status">запуск…</div>
+  <div id="diag"></div>
+</div>
+
+<script>
+  function showDiag(title, text) {
+    var diagEl = document.getElementById('diag');
+    diagEl.innerHTML = '<b>' + title + '</b>' + text;
+    diagEl.style.display = 'block';
+  }
+
+  // Ловим ЛЮБУЮ непойманную ошибку на странице — раньше без этого
+  // браузер показывал только «Script error.» без деталей (это его
+  // стандартное поведение для скриптов с другого домена без атрибута
+  // crossorigin — сейчас добавлен ниже, должно показать реальный текст).
+  window.onerror = function (message, source, lineno, colno, error) {
+    showDiag('Поймана ошибка JavaScript', '<code>' + message + '</code><br>Файл: ' + (source || '?') + ', строка ' + (lineno || '?'));
+  };
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.3.0/dist/maplibre-gl.js" crossorigin="anonymous"></script>
+<script>
+  var statusEl = document.getElementById('status');
+
+  if (typeof maplibregl === 'undefined') {
+    statusEl.textContent = 'ошибка';
+    showDiag('Библиотека карты не загрузилась', 'cdn.jsdelivr.net недоступен из вашей сети — проверьте интернет или попробуйте другую сеть.');
+  } else {
+    statusEl.textContent = 'библиотека OK, гружу тайлы…';
+
+    try {
+      const map = new maplibregl.Map({
+        container: 'map',
+        style: 'https://tiles.openfreemap.org/styles/liberty',
+        center: [37.4468, 55.7295],
+        zoom: 16.5,
+        pitch: 60,
+        bearing: -20,
+        antialias: true
+      });
+
+      map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
+
+      new maplibregl.Marker({ color: '#e0b45c' })
+        .setLngLat([37.4468, 55.7295])
+        .setPopup(new maplibregl.Popup().setHTML('<b>АВИОР</b><br>Можайское шоссе, 4к1, Москва'))
+        .addTo(map);
+
+      map.on('load', function () {
+        statusEl.textContent = 'загружено ✓';
+        setTimeout(function () { statusEl.style.display = 'none'; }, 2000);
+      });
+
+      map.on('error', function (e) {
+        var msg = (e && e.error && e.error.message) ? e.error.message : 'неизвестная ошибка';
+        statusEl.textContent = 'ошибка';
+        showDiag('Тайлы карты не загрузились', '<code>' + msg + '</code><br>Возможно, tiles.openfreemap.org заблокирован в вашей сети — попробуйте через VPN.');
+      });
+
+      setTimeout(function () {
+        if (!map.loaded()) {
+          showDiag('Карта не загружается', 'Прошло 8 секунд, тайлы так и не пришли. Похоже, tiles.openfreemap.org недоступен из вашей сети.');
+        }
+      }, 8000);
+    } catch (initError) {
+      statusEl.textContent = 'ошибка инициализации';
+      showDiag('Ошибка при создании карты', '<code>' + initError.message + '</code>');
+    }
+  }
+</script>
+
+</body>
+</html>
