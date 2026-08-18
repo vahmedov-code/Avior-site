@@ -21,21 +21,29 @@
     position:absolute;bottom:16px;left:16px;background:rgba(28,36,54,.85);color:#fff;
     padding:8px 14px;border-radius:8px;font-size:12.5px;z-index:5;
   }
-  /* Фирменный маркер АВИОР — бейдж вместо стандартной капли,
-     плюс маленький «хвостик»-указатель снизу слева (псевдоэлемент). */
+  /* Фирменный маркер АВИОР — бейдж с названием + иконка инструментов
+     под текстом (шестерёнка + отвёртка, по вкусу заказчика). */
   .avior-pin{
     background:#1c2436;
     border:2px solid #e0b45c;
     border-radius:8px 8px 8px 2px;
-    padding:7px 13px;
+    padding:7px 13px 8px;
     box-shadow:0 3px 10px rgba(0,0,0,.4);
-    color:#e0b45c;
-    font-weight:800;
-    font-size:13px;
-    letter-spacing:.03em;
-    white-space:nowrap;
+    text-align:center;
     cursor:pointer;
   }
+  .avior-pin .name{
+    color:#e0b45c;font-weight:800;font-size:13px;letter-spacing:.03em;white-space:nowrap;
+  }
+  .avior-pin .tools{font-size:14px;margin-top:2px;line-height:1;}
+
+  /* Всплывающая подсказка — фото витрины, название, адрес, телефон */
+  .maplibregl-popup-content{padding:0 !important;border-radius:10px !important;overflow:hidden;}
+  .avior-popup img{width:100%;height:120px;object-fit:cover;display:block;}
+  .avior-popup .info{padding:10px 14px 12px;font-family:-apple-system,sans-serif;}
+  .avior-popup .info b{font-size:15px;color:#1c2436;display:block;margin-bottom:3px;}
+  .avior-popup .info .addr{font-size:12.5px;color:#555;display:block;margin-bottom:5px;}
+  .avior-popup .info a{font-size:13px;color:#1c2436;text-decoration:none;font-weight:600;}
 </style>
 </head>
 <body>
@@ -55,8 +63,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/maplibre-gl@5.3.0/dist/maplibre-gl.js" crossorigin="anonymous"></script>
 <script>
-  // Точные координаты — с карточки дома на Яндекс Картах (Можайское
-  // шоссе, 4к1), не приблизительная оценка, как было раньше.
   const AVIOR_COORDS = [37.443721, 55.723146];
 
   const map = new maplibregl.Map({
@@ -71,15 +77,24 @@
 
   map.addControl(new maplibregl.NavigationControl({ visualizePitch: true }));
 
-  // Кастомный маркер вместо стандартной капли — фирменный бейдж
-  // навигационного цвета с золотой рамкой, как в остальном интерфейсе.
   const pinEl = document.createElement('div');
   pinEl.className = 'avior-pin';
-  pinEl.textContent = 'АВИОР';
+  pinEl.innerHTML = '<div class="name">АВИОР</div><div class="tools">⚙️🪛</div>';
+
+  const popupHtml = `
+    <div class="avior-popup">
+      <img src="avior-storefront.jpg" alt="Сервис АВИОР — вход">
+      <div class="info">
+        <b>АВИОР</b>
+        <span class="addr">Можайское шоссе, 4к1, Москва</span>
+        <a href="tel:+79012228111">📞 +7 (901) 222-81-11</a>
+      </div>
+    </div>
+  `;
 
   new maplibregl.Marker({ element: pinEl, anchor: 'bottom-left' })
     .setLngLat(AVIOR_COORDS)
-    .setPopup(new maplibregl.Popup({ offset: 12 }).setHTML('<b>АВИОР</b><br>Можайское шоссе, 4к1, Москва'))
+    .setPopup(new maplibregl.Popup({ offset: 12, maxWidth: '260px' }).setHTML(popupHtml))
     .addTo(map);
 </script>
 
