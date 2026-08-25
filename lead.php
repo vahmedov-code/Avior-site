@@ -7,7 +7,7 @@
 header('Content-Type: application/json; charset=utf-8');
 
 // CORS: разрешаем запросы только со своего домена
-$allowed = ['https://avior.moscow', 'https://www.avior.moscow'];
+$allowed = ['https://avior.moscow', 'https://www.avior.moscow', 'https://ux.avior.moscow'];
 $origin  = $_SERVER['HTTP_ORIGIN'] ?? '';
 if (in_array($origin, $allowed, true)) {
     header("Access-Control-Allow-Origin: $origin");
