@@ -135,19 +135,7 @@
   </div>
 </header>
 
-<button class="theme-toggle" onclick="toggleTheme()" aria-label="Переключить тему">
-  <span class="tt-icon" style="margin-left:2px">☀</span>
-  <span class="tt-icon" style="margin-right:2px">●</span>
-  <span class="tt-knob"></span>
-</button>
 <script>
-function toggleTheme(){
-  var current = document.documentElement.getAttribute('data-theme') || 'dark';
-  var next = current === 'dark' ? 'light' : 'dark';
-  document.documentElement.setAttribute('data-theme', next);
-  try{ localStorage.setItem('avior-theme', next); }catch(e){}
-  if(window.ym) ym(110953361,'reachGoal','theme_toggle_'+next);
-}
 try{
   if(!localStorage.getItem('avior-theme')){
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function(e){
