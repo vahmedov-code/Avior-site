@@ -6,7 +6,7 @@
 (function(){
   try{
     var saved = localStorage.getItem('avior-theme');
-    var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    var theme = saved || 'dark';
     document.documentElement.setAttribute('data-theme', theme);
   }catch(e){}
 })();
@@ -65,6 +65,9 @@
   "areaServed": { "@type": "City", "name": "Москва" }
 }
 </script>
+<link rel="stylesheet" href="/premium.css">
+<script src="/premium.js" defer></script>
+<script src="/circuit.js" defer></script>
 </head>
 <body>
 
@@ -73,129 +76,105 @@
     <a class="logo" href="#top">AVI<span>OR</span></a>
     <nav class="nav-links" id="navLinks">
       <a href="#services">Услуги</a>
-      <a href="#process">Как работаю</a>
+      <a href="#process">Как всё устроено</a>
       <a href="#master">Мастер</a>
       <a href="#contact">Контакты</a>
       <a href="#" onclick="openStatus(event)" style="color:var(--gold)">Статус ремонта</a>
     </nav>
     <a class="nav-phone" href="tel:+79012228111" onclick="if(window.ym) ym(110953361,'reachGoal','phone_click')">+7 901 222-81-11</a>
+    <a class="nav-cta" href="#leadForm">Оставить заявку ↗</a>
     <button class="burger" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Меню">☰</button>
   </div>
 </header>
 
 
 <div class="hero" id="top">
-  <canvas id="heroParticles" aria-hidden="true"></canvas>
-  <!-- фон: дорожки платы -->
-  <svg class="traces" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-    <g class="trace-line" stroke-width="2" fill="none">
-      <path d="M-20 180 H320 L400 260 H760"/>
-      <path d="M-20 320 H180 L260 400 H520 L600 480 H900"/>
-      <path d="M120 900 V640 L200 560 H460"/>
-      <path d="M1460 120 H1120 L1040 200 V420"/>
-      <path d="M1460 560 H1180 L1100 640 H860"/>
-      <path d="M700 900 V760 L780 680 H1040"/>
-    </g>
-    <g class="trace-node" stroke-width="2">
-      <circle cx="320" cy="180" r="7"/><circle cx="760" cy="260" r="7"/>
-      <circle cx="520" cy="400" r="7"/><circle cx="900" cy="480" r="7"/>
-      <circle cx="460" cy="560" r="7"/><circle cx="1040" cy="420" r="7"/>
-      <circle cx="860" cy="640" r="7"/><circle cx="1040" cy="680" r="7"/>
-    </g>
-    <g class="trace-dot" opacity=".9">
-      <circle cx="320" cy="180" r="2.5"/><circle cx="760" cy="260" r="2.5"/>
-      <circle cx="520" cy="400" r="2.5"/><circle cx="900" cy="480" r="2.5"/>
-      <circle cx="460" cy="560" r="2.5"/><circle cx="1040" cy="420" r="2.5"/>
-      <circle cx="860" cy="640" r="2.5"/><circle cx="1040" cy="680" r="2.5"/>
-    </g>
-  </svg>
-
-  <!-- прицел микроскопа -->
-  <svg class="reticle" viewBox="0 0 340 340" aria-hidden="true">
-    <circle class="reticle-ring" cx="170" cy="170" r="150" fill="none" stroke-width="1.5"/>
-    <circle class="reticle-ring" cx="170" cy="170" r="100" fill="none" stroke-width="1"/>
-    <circle class="reticle-ring-accent" cx="170" cy="170" r="46" fill="none" stroke-width="1.5"/>
-    <line class="reticle-ring" x1="170" y1="0" x2="170" y2="120" stroke-width="1"/>
-    <line class="reticle-ring" x1="170" y1="220" x2="170" y2="340" stroke-width="1"/>
-    <line class="reticle-ring" x1="0" y1="170" x2="120" y2="170" stroke-width="1"/>
-    <line class="reticle-ring" x1="220" y1="170" x2="340" y2="170" stroke-width="1"/>
-    <line class="reticle-cross" x1="160" y1="170" x2="180" y2="170" stroke-width="1.5"/>
-    <line class="reticle-cross" x1="170" y1="160" x2="170" y2="180" stroke-width="1.5"/>
-    <text class="reticle-label" x="252" y="96" font-family="JetBrains Mono, monospace" font-size="11">×45</text>
-  </svg>
-
-  <div class="wrap hero-inner">
-    <div class="eyebrow">// Сервис компонентного ремонта · Москва</div>
-    <h1>Точный ремонт вместо <em>дорогих</em> экспериментов</h1>
-    <p class="lead">AVIOR — мастерская компонентного ремонта: материнские платы, BGA-пайка, переклейка стёкол, модульный ремонт смартфонов, планшетов и ноутбуков. Диагностика под микроскопом, честный вердикт до начала работ.</p>
-    <div class="cta-row">
-      <a class="btn btn-main" href="#contact">Оценить ремонт</a>
-      <a class="btn btn-ghost" href="#services">Услуги и цены</a>
+  <div class="wrap hero-layout">
+    <div class="hero-copy">
+      <div class="eyebrow">СЕРВИС КОМПОНЕНТНОГО РЕМОНТА · МОСКВА</div>
+      <h1>Ваша техника.<br>В <em>точных</em><br>руках.</h1>
+      <p class="lead">Возвращаем к жизни то, что важно для вас. От разбитого стекла до сложного ремонта платы — с вниманием к каждой детали.</p>
+      <div class="cta-row"><a class="btn btn-main" href="#leadForm">Обсудить ремонт</a><a class="btn btn-ghost" href="#services">Услуги и цены</a></div>
+      <div class="hero-meta">
+        <div class="hm"><b>5.0 <span aria-hidden="true" style="display:inline;color:var(--gold);font-size:15px">★</span></b><span>на Яндекс.Картах</span></div>
+        <div class="hm"><b>10 лет</b><span>опыта ремонта</span></div>
+        <div class="hm"><b>Лично</b><span>на связи с мастером</span></div>
+      </div>
     </div>
-    <div class="hero-meta">
-      <div class="hm"><b>5.0</b><span>рейтинг на Яндекс.Картах</span></div>
-      <div class="hm"><b>73</b><span>отзыва клиентов</span></div>
-      <div class="hm"><b>10 лет</b><span>за паяльной станцией</span></div>
+    <div class="hero-art">
+      <img src="/bga-photo.webp" alt="Плата ноутбука, чипы и инструменты для компонентного ремонта в AVIOR" width="900" height="900" fetchpriority="high">
+      <div class="orbit-label"><b>AVIOR</b>ВНИМАНИЕ<br>К ДЕТАЛЯМ</div>
+      <div class="art-label"><small>ТОЧНОСТЬ НА УРОВНЕ КОМПОНЕНТОВ</small><p>Не просто заменить.<br>Разобраться и восстановить.</p></div>
     </div>
   </div>
 </div>
+<div class="wrap service-strip"><span>Ноутбуки и ПК</span><span>Смартфоны и планшеты</span><span>Игровые консоли</span><span>Материнские платы</span></div>
 
 <section id="services">
   <div class="wrap">
     <div class="sec-head">
-      <div class="eyebrow">// Услуги</div>
+      <div class="eyebrow">Услуги</div>
       <h2>Что чиню</h2>
     </div>
     <div class="grid">
       <a class="card-link" href="/remont-materinskih-plat/"><div class="card">
+<img class="service-image" src="/plata-photo.webp" alt="" width="900" height="900" loading="lazy">
         <div class="ref"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="3" y="3" width="18" height="18" rx="2"/><rect x="8" y="8" width="8" height="8"/><path d="M3 8h2M3 14h2M19 8h2M19 14h2M8 3v2M14 3v2M8 19v2M14 19v2"/></svg>U1 · ПЛАТЫ</div>
         <h3>Компонентный ремонт материнских плат</h3>
         <p>Диагностика по схеме, замена контроллеров питания, восстановление после жидкости и КЗ. Ноутбуки, смартфоны, планшеты.</p>
         <div class="price">от 2 500 ₽ <small>· диагностика бесплатно при ремонте</small></div>
       </div></a>
       <a class="card-link" href="/bga-pajka/"><div class="card">
+<img class="service-image" src="/bga-photo.webp" alt="" width="900" height="900" loading="lazy">
         <div class="ref"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="4" y="4" width="16" height="16" rx="2"/><circle cx="8" cy="8" r="1"/><circle cx="12" cy="8" r="1"/><circle cx="16" cy="8" r="1"/><circle cx="8" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="16" cy="12" r="1"/><circle cx="8" cy="16" r="1"/><circle cx="12" cy="16" r="1"/><circle cx="16" cy="16" r="1"/></svg>U2 · BGA</div>
         <h3>BGA-пайка и реболл чипов</h3>
         <p>Замена и перекатка видеочипов, процессоров, памяти, контроллеров. Нижний подогрев, трафареты, контроль профиля.</p>
         <div class="price">от 4 000 ₽</div>
       </div></a>
       <a class="card-link" href="/pereklejka-stekla/"><div class="card">
+<img class="service-image" src="/glass-photo.webp" alt="" width="900" height="900" loading="lazy">
         <div class="ref"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M10 19h4"/><path d="M6 7h12M6 15h12"/></svg>U3 · СТЕКЛО</div>
         <h3>Переклейка стекла дисплеев</h3>
         <p>Замена стекла с сохранением родной матрицы смартфона или планшета: сепарация, OCA-плёнка, автоклав.</p>
         <div class="price">от 3 000 ₽</div>
       </div></a>
       <a class="card-link" href="/modulnyj-remont/"><div class="card">
+<img class="service-image" src="/modul-photo.webp" alt="" width="900" height="900" loading="lazy">
         <div class="ref"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="2" y="7" width="18" height="10" rx="2"/><path d="M22 10v4"/><path d="M6 10v4M10 10v4"/></svg>U4 · МОДУЛЬ</div>
         <h3>Модульный ремонт</h3>
         <p>Дисплеи, аккумуляторы, разъёмы зарядки, камеры, динамики. Оригинальные и качественные совместимые запчасти — на выбор.</p>
         <div class="price">от 1 500 ₽</div>
       </div></a>
       <a class="card-link" href="/sborka-apgrejd-pk/"><div class="card">
+<img class="service-image" src="/pcbuild-photo.webp" alt="" width="900" height="900" loading="lazy">
         <div class="ref"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="5" y="3" width="10" height="18" rx="1.5"/><circle cx="10" cy="7" r="1"/><path d="M7 12h6M7 15h6M19 8v8"/></svg>U5 · СБОРКА</div>
         <h3>Сборка и апгрейд ПК</h3>
         <p>Соберём под вашу задачу: игровой ПК, рабочая станция для дома или офиса. Подбор компонентов под бюджет, апгрейд имеющейся сборки, чистка и обслуживание.</p>
         <div class="price">от 2 000 ₽</div>
       </div></a>
       <a class="card-link" href="/spasenie-dannyh/"><div class="card">
+<img class="service-image" src="/dannye-photo.webp" alt="" width="900" height="900" loading="lazy">
         <div class="ref"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><path d="M12 3l7 3v6c0 4.5-3 7.5-7 9-4-1.5-7-4.5-7-9V6z"/><path d="M9.5 12l1.8 1.8L14.5 10"/></svg>U6 · ДАННЫЕ</div>
         <h3>Спасение данных</h3>
         <p>Восстановление доступа к данным с устройств, которые не включаются: ремонт платы до состояния «считать и сохранить».</p>
         <div class="price">по результатам диагностики</div>
       </div></a>
       <a class="card-link" href="/obsluzhivanie-ohlazhdeniya-noutbukov/"><div class="card">
+<img class="service-image" src="/cooling-photo.webp" alt="" width="900" height="900" loading="lazy">
         <div class="ref"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><circle cx="12" cy="12" r="2"/><path d="M12 10c0-3 1.5-6 4-6 2 0 2.5 2 1 3.5C15.5 9 12 10 12 10z"/><path d="M14 12c3 0 6 1.5 6 4 0 2-2 2.5-3.5 1C15 15.5 14 12 14 12z"/><path d="M12 14c0 3-1.5 6-4 6-2 0-2.5-2-1-3.5C8.5 15 12 14 12 14z"/><path d="M10 12c-3 0-6-1.5-6-4 0-2 2-2.5 3.5-1C9 8.5 10 12 10 12z"/></svg>U7 · ОХЛАЖДЕНИЕ</div>
         <h3>Обслуживание охлаждения игровых ноутбуков</h3>
         <p>Чистка, фазовый термопереход Laird на CPU/GPU, жидкие термопрокладки Denka на VRM и память — премиальные материалы вместо обычной пасты.</p>
         <div class="price">от 6 000 ₽</div>
       </div></a>
       <a class="card-link" href="/remont-igrovyh-pristavok/"><div class="card">
+<img class="service-image" src="/pristavka-photo.webp" alt="" width="900" height="900" loading="lazy">
         <div class="ref"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><path d="M6 9h12l2 6.5a2 2 0 0 1-3.5 1.8L15 15H9l-1.5 2.3A2 2 0 0 1 4 15.5z"/><path d="M8 11v3M6.5 12.5h3"/><circle cx="16" cy="11.5" r=".8"/><circle cx="18" cy="13.5" r=".8"/></svg>U8 · ПРИСТАВКИ</div>
         <h3>Ремонт и чистка игровых приставок</h3>
         <p>PS5, PS4, Xbox, Steam Deck, ASUS ROG Ally — чистка от пыли, термопаста. Ремонт геймпадов: стик-дрифт, кнопки, разъёмы зарядки.</p>
         <div class="price">от 2 500 ₽</div>
       </div></a>
       <a class="card-link" href="/remont-monoblokov/"><div class="card">
+<img class="service-image" src="/monoblok-photo.webp" alt="" width="900" height="900" loading="lazy">
         <div class="ref"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.6"><rect x="4" y="3" width="16" height="14" rx="2"/><path d="M9 21h6M12 17v4"/><circle cx="12" cy="10" r="2.5"/></svg>U9 · МОНОБЛОКИ</div>
         <h3>Ремонт моноблоков Mac и PC</h3>
         <p>Диагностика платы, замена накопителя на SSD, чистка охлаждения, ремонт после жидкости. Apple iMac и PC-моноблоки.</p>
@@ -208,7 +187,7 @@
 <section id="process">
   <div class="wrap">
     <div class="sec-head">
-      <div class="eyebrow">// Процесс</div>
+      <div class="eyebrow">Процесс</div>
       <h2>Как проходит ремонт</h2>
     </div>
     <div class="steps">
@@ -239,7 +218,7 @@
 <section id="master">
   <div class="wrap">
     <div class="sec-head">
-      <div class="eyebrow">// Мастер</div>
+      <div class="eyebrow">Мастер</div>
       <h2>Кто будет чинить</h2>
     </div>
     <div class="master">
@@ -305,7 +284,7 @@
 <section id="proof">
   <div class="wrap">
     <div class="sec-head">
-      <div class="eyebrow">// Репутация</div>
+      <div class="eyebrow">Репутация</div>
       <h2>Проверено клиентами</h2>
     </div>
     <div class="proof">
@@ -389,7 +368,7 @@
 <section id="contact">
   <div class="wrap">
     <div class="sec-head">
-      <div class="eyebrow">// Контакты</div>
+      <div class="eyebrow">Контакты</div>
       <h2>Оценить ремонт</h2>
     </div>
     <div class="contact">
@@ -410,11 +389,12 @@
         </span></div>
       </div>
       <div>
-        <form id="leadForm" onsubmit="sendLead(event)">
+        <h3 class="form-heading">Начнём с вашей задачи</h3><p class="form-intro">Расскажите, что случилось. Мастер свяжется с вами и подскажет следующий шаг.</p>
+<form id="leadForm" onsubmit="sendLead(event)">
         <input type="text" name="website" id="lf-hp" style="position:absolute;left:-9999px;opacity:0" tabindex="-1" autocomplete="off">
         <div class="field">
           <label for="f-name">Имя</label>
-          <input id="f-name" type="text" placeholder="Как к вам обращаться" required>
+          <input autocomplete="name" id="f-name" type="text" placeholder="Как к вам обращаться" required>
         </div>
         <div class="field">
           <label for="f-phone">Телефон или ник в мессенджере</label>
@@ -460,6 +440,8 @@
       .avior-popup .info a{font-size:13px;color:var(--copper);text-decoration:none;font-weight:600;}
     </style>
     <div id="avior-map"></div>
+    <p style="margin-top:18px"><a class="btn btn-ghost" href="https://yandex.ru/maps/?rtext=~55.723146,37.443721&amp;rtt=auto" target="_blank" rel="noopener">Построить маршрут ↗</a></p>
+  </div>
 </section>
 
 <footer class="site">
@@ -552,7 +534,7 @@ document.addEventListener('DOMContentLoaded', function(){
 try{
   if(!localStorage.getItem('avior-theme')){
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function(e){
-      document.documentElement.setAttribute('data-theme', e.matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', 'dark');
       if(window.aviorUpdateParticleColors) requestAnimationFrame(window.aviorUpdateParticleColors);
     });
   }
@@ -770,7 +752,7 @@ async function sendLead(e){
 
   var map = new maplibregl.Map({
     container: 'avior-map',
-    style: 'https://avior.moscow/omf/styles/liberty',
+    style: '/omf/styles/liberty',
     center: AVIOR_COORDS,
     zoom: 17,
     pitch: 60,
@@ -807,5 +789,6 @@ async function sendLead(e){
   </span>
   <span class="ux-badge-text">Веб-разработка</span>
 </a>
+<a class="btn btn-main mobile-apply" href="#leadForm">Оставить заявку</a>
 </body>
 </html>

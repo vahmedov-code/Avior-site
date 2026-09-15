@@ -6,7 +6,7 @@
 (function(){
   try{
     var saved = localStorage.getItem('avior-theme');
-    var theme = saved || (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    var theme = saved || 'dark';
     document.documentElement.setAttribute('data-theme', theme);
   }catch(e){}
 })();
@@ -117,6 +117,8 @@
   ]
 }
 </script>
+<link rel="stylesheet" href="/premium.css">
+<script src="/premium.js" defer></script>
 </head>
 <body>
 
@@ -131,6 +133,7 @@
       <a href="/#status" style="color:var(--gold)">Статус ремонта</a>
     </nav>
     <a class="nav-phone" href="tel:+79012228111" onclick="if(window.ym) ym(110953361,'reachGoal','phone_click')">+7 901 222-81-11</a>
+    <a class="nav-cta" href="#leadForm">Оставить заявку ↗</a>
     <button class="burger" onclick="document.getElementById('navLinks').classList.toggle('open')" aria-label="Меню">☰</button>
   </div>
 </header>
@@ -139,7 +142,7 @@
 try{
   if(!localStorage.getItem('avior-theme')){
     window.matchMedia('(prefers-color-scheme: light)').addEventListener('change', function(e){
-      document.documentElement.setAttribute('data-theme', e.matches ? 'light' : 'dark');
+      document.documentElement.setAttribute('data-theme', 'dark');
     });
   }
 }catch(e){}
@@ -147,7 +150,7 @@ try{
 
 <div class="svc-hero wrap">
   <div class="crumbs"><a href="/">Главная</a> / <a href="/#services">Услуги</a> / Ремонт и чистка игровых приставок и геймпадов</div>
-  <div class="eyebrow" style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.2em;color:var(--copper);text-transform:uppercase;margin-bottom:16px">// U8 · ПРИСТАВКИ</div>
+  <div class="eyebrow" style="font-family:'JetBrains Mono',monospace;font-size:12px;letter-spacing:.2em;color:var(--copper);text-transform:uppercase;margin-bottom:16px">U8 · ПРИСТАВКИ</div>
   <h1>Ремонт и чистка игровых приставок и геймпадов</h1>
   <p class="lead">Приставка стала громко шуметь, греется и выключается в разгар игры — почти всегда виновата забитая пылью система охлаждения и пересохшая термопаста, тот же принцип, что и с игровыми ноутбуками. Чищу PS5, PS4, Xbox, портативки Steam Deck и ASUS ROG Ally, меняю термопасту, ремонтирую геймпады — от разболтавшихся стиков до убитых разъёмов зарядки.</p>
   <div class="price-box"><b>от 2 500 ₽</b><span>цена зависит от модели и объёма работ</span></div>
@@ -169,7 +172,7 @@ try{
 <section>
   <div class="wrap">
     <div class="sec-head">
-      <div class="eyebrow">// Что входит</div>
+      <div class="eyebrow">Что входит</div>
       <h2>Как проходит чистка приставки</h2>
     </div>
     <div class="grid">
@@ -200,7 +203,7 @@ try{
 <section>
   <div class="wrap">
     <div class="sec-head">
-      <div class="eyebrow">// Вопросы</div>
+      <div class="eyebrow">Вопросы</div>
       <h2>Частые вопросы</h2>
     </div>
     <div class="faq">
@@ -233,7 +236,7 @@ try{
         <input type="text" name="website" id="lf-hp" style="position:absolute;left:-9999px;opacity:0" tabindex="-1" autocomplete="off">
         <div class="field">
           <label for="f-name">Имя</label>
-          <input id="f-name" type="text" placeholder="Как к вам обращаться" required>
+          <input autocomplete="name" id="f-name" type="text" placeholder="Как к вам обращаться" required>
         </div>
         <div class="field">
           <label for="f-phone">Телефон или ник в мессенджере</label>
@@ -306,5 +309,6 @@ async function sendLead(e){
   </span>
   <span class="ux-badge-text">Веб-разработка</span>
 </a>
+<a class="btn btn-main mobile-apply" href="#leadForm">Оставить заявку</a>
 </body>
 </html>
