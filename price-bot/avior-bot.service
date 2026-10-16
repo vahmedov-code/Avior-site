@@ -1,0 +1,15 @@
+[Unit]
+Description=AVIOR Shop Telegram bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=avior-bot
+WorkingDirectory=/opt/avior/price-bot
+ExecStart=/opt/avior/price-bot/.venv/bin/python -m app.main
+Restart=always
+RestartSec=5
+MemoryMax=300M
+
+[Install]
+WantedBy=multi-user.target

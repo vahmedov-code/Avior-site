@@ -48,7 +48,20 @@
 2. Узнайте свой Telegram ID у [@userinfobot](https://t.me/userinfobot).
 3. Скопируйте `.env.example` в `.env` и заполните `BOT_TOKEN`, `ADMIN_IDS`, контакты.
 
-### На сервере через Docker (рекомендуется)
+### На сервере как служба (без Docker)
+
+```bash
+git clone -b claude/clever-turing-0k1k99 https://github.com/vahmedov-code/avior-site.git /opt/avior
+cd /opt/avior/price-bot && ./install.sh
+nano .env                      # вписать BOT_TOKEN
+systemctl restart avior-bot
+journalctl -u avior-bot -f     # логи
+```
+
+Обновление кода: `cd /opt/avior && git pull && systemctl restart avior-bot`.
+Импорт из терминала: `cd /opt/avior/price-bot && sudo -u avior-bot .venv/bin/python manage.py import result.json`.
+
+### На сервере через Docker
 
 ```bash
 cd price-bot
