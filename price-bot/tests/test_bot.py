@@ -341,3 +341,15 @@ def test_only_word_and_merge_into_existing_category():
     assert [c.title for c in catalog.categories] == ["Dyson"]
     names = [it.name for s in catalog.categories[0].sections for it in s.items]
     assert names == ["V8 SV25 Absolute", "Dyson Gen5", "HD16 Red Velvet"]
+
+
+def test_category_icons():
+    from app.keyboards import with_icon
+    assert with_icon("iPhone 18 Pro") == "📱 iPhone 18 Pro"
+    assert with_icon("Игровые Ноутбуки") == "🕹 Игровые Ноутбуки"
+    assert with_icon("MacBook Pro 14/16") == "💻 MacBook Pro 14/16"
+    assert with_icon("AW S11/Se3/Ultra") == "⌚ AW S11/Se3/Ultra"
+    assert with_icon("iPad Air 11/13") == "📲 iPad Air 11/13"
+    assert with_icon("📱 Своя") == "📱 Своя"
+    assert with_icon("Игровые Консоли") == "🎮 Игровые Консоли"
+    assert with_icon("Что-то новое") == "Что-то новое"

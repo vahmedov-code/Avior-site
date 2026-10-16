@@ -11,6 +11,27 @@ BTN_QUESTION = InlineKeyboardButton(text="💬 Задать вопрос", callb
 BTN_HOME = InlineKeyboardButton(text="🏠 В меню", callback_data="home")
 
 
+# Иконка категории по словам в названии; первое совпадение выигрывает
+CATEGORY_ICONS = (
+    ("консол", "🎮"), ("игров", "🕹"), ("iphone", "📱"), ("ipad", "📲"), ("планшет", "📲"),
+    ("samsung", "🤖"), ("xiaomi", "🤖"), ("huawei", "🤖"), ("honor", "🤖"), ("pixel", "🤖"),
+    ("macbook", "💻"), ("ноутбук", "💻"), ("imac", "🖥"), ("mac mini", "🖥"), ("компьютер", "🖥"),
+    ("airpods", "🎧"), ("наушник", "🎧"), ("колонк", "🔊"), ("aw ", "⌚"), ("watch", "⌚"), ("часы", "⌚"),
+    ("очки", "🕶"), ("dyson", "🌀"), ("пылесос", "🧹"), ("dji", "🚁"),
+    ("гаджет", "🔌"), ("телевизор", "📺"), ("быт", "🏠"),
+)
+
+
+def with_icon(title: str) -> str:
+    if title[:1] and not title[0].isalnum():
+        return title  # иконка уже есть в названии
+    low = title.lower() + " "
+    for word, icon in CATEGORY_ICONS:
+        if word in low:
+            return f"{icon} {title}"
+    return title
+
+
 def cart_button(count: int) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=f"🛒 Корзина ({count})", callback_data="cart")
 
@@ -19,7 +40,7 @@ def main_menu(categories, cart_count: int = 0) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for c in categories:
         if c["n_items"]:
-            kb.button(text=c["title"], callback_data=f"c:{c['id']}")
+            kb.button(text=with_icon(c["title"]), callback_data=f"c:{c['id']}")
     kb.adjust(2)
     if cart_count:
         kb.row(cart_button(cart_count))

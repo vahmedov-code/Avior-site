@@ -415,10 +415,11 @@ async def on_document(message: Message, bot: Bot, db: DB, cfg: Config):
         await message.answer("В файле не нашёл постов с ценами.")
         return
     results = import_catalog(db, cfg, catalog)
-    await message.answer(format_bulk_report(results))
+    stale = [c for c in db.categories() if c["id"] not in {r.cat_id for r in results} and c["n_items"]]
+    await message.answer(format_bulk_report(results, stale))
 
 
-def format_bulk_report(results) -> str:
+def format_bulk_report(results, stale=()) -> str:
     lines = [f"✅ <b>Прайс обновлён</b>: {len(results)} категорий, "
              f"{sum(r.diff.total for r in results)} позиций", ""]
     for r in results:
@@ -433,6 +434,10 @@ def format_bulk_report(results) -> str:
         if r.skipped:
             extra.append(f"🚫 {r.skipped}")
         lines.append(f"{mark}{r.cat_id}. {html.escape(r.title)} — {r.diff.total}" + (f" ({' '.join(extra)})" if extra else ""))
+    if stale:
+        lines += ["", "⚠️ <b>Не обновлялись</b> — их нет в файле (или они теперь пропускаются/объединены):"]
+        lines += [f"{c['id']}. {html.escape(c['title'])} — {c['n_items']} поз. · удалить: /delcat {c['id']}"
+                  for c in stale]
     lines += ["", "💱 цена изменилась · ➕ новые · ➖ пропали · 🚫 пропущены (чехлы, зарядки…)",
               "Наценки категорий — /cats, прайс в Excel — /excel"]
     return "\n".join(lines)
