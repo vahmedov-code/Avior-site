@@ -1,7 +1,8 @@
 """Команды владельца: импорт прайса пересылкой поста, наценки, категории."""
 import html
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command, CommandObject, Filter, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -10,6 +11,7 @@ from aiogram.types import CallbackQuery, Message, MessageOriginChannel, Telegram
 from . import keyboards as kb
 from .config import Config
 from .db import DB, ImportDiff
+from .handlers_user import ORDER_STATUS, render_order_for_admin
 from .parser import count_items, parse_post
 from .pricing import apply_markup, fmt_price
 
@@ -27,6 +29,10 @@ HELP = """<b>Управление ботом</b>
 /catmarkup 3 15 — своя наценка для категории №3 (+15%)
 /catmarkup 3 15 1000 — +15% и +1000 ₽
 /catmarkup 3 off — категория №3 снова по общей наценке
+
+<b>Заказы</b>
+Новые заказы приходят сюда с кнопками ✅ Подтвердить / ❌ Отменить — клиент получит уведомление.
+/orders — последние 10 заказов
 
 <b>Категории</b>
 /cats — список с номерами
@@ -284,3 +290,44 @@ async def cmd_catmarkup(message: Message, command: CommandObject, db: DB):
         db.set_category_markup(cat["id"], pct, fixed)
     pct, fixed, step = db.markup(db.category(cat["id"]))
     await message.answer(f"«{html.escape(cat['title'])}»: {markup_text(pct, fixed)}, округление до {step} ₽")
+
+
+# --- заказы ---
+
+@router.callback_query(F.data.startswith("o:"))
+async def cb_order_status(call: CallbackQuery, bot: Bot, db: DB, cfg: Config):
+    _, status, order_id = call.data.split(":")
+    order = db.order(int(order_id))
+    if not order:
+        await call.answer("Заказ не найден", show_alert=True)
+        return
+    db.set_order_status(order["id"], status)
+    await call.message.edit_text(render_order_for_admin(db, db.order(order["id"])), reply_markup=None)
+    if status == "ok":
+        text = (f"✅ Ваш заказ №{order['id']} подтверждён!\n"
+                "Менеджер свяжется с вами, чтобы согласовать оплату и доставку.")
+    else:
+        text = (f"❌ Заказ №{order['id']} отменён.\n"
+                "Если это ошибка или остались вопросы — напишите нам, контакты в меню бота.")
+    try:
+        await bot.send_message(order["user_id"], text)
+    except (TelegramBadRequest, TelegramForbiddenError):
+        await call.answer("Статус сохранён, но клиент заблокировал бота", show_alert=True)
+        return
+    await call.answer("Клиент уведомлён")
+
+
+@router.message(Command("orders"))
+async def cmd_orders(message: Message, db: DB):
+    rows = db.recent_orders(10)
+    if not rows:
+        await message.answer("Заказов пока нет.")
+        return
+    lines = ["<b>Последние заказы</b>"]
+    for o in rows:
+        who = f"@{o['username']}" if o["username"] else html.escape(o["user_name"])
+        lines.append(
+            f"№{o['id']} · {ORDER_STATUS.get(o['status'], o['status'])} · {fmt_price(o['total'])} · "
+            f"{who} · {html.escape(o['phone'])}"
+        )
+    await message.answer("\n".join(lines))

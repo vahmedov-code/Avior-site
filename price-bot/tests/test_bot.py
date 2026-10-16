@@ -95,3 +95,30 @@ def test_move_category():
 
 def test_handlers_import():
     from app import handlers_admin, handlers_user  # noqa: F401
+
+
+def test_cart_survives_price_update_and_order():
+    db = DB(":memory:")
+    db.init_defaults({"markup_pct": 10, "markup_fixed": 0, "round_step": 100})
+    cat = db.add_category("iPhone 18 Pro")
+    db.replace_items(cat, parse_post(SAMPLE))
+    black = next(i for i in db.items(cat) if i["name"] == "18 Pro 256Gb Black")
+    adapter = next(i for i in db.items(cat) if i["name"] == "Adapter Apple 35W")
+    db.add_to_cart(7, black)
+    db.add_to_cart(7, black)
+    db.add_to_cart(7, adapter)
+    assert db.cart_count(7) == 3
+
+    # поставщик поднял цену и убрал адаптер — корзина это видит
+    db.replace_items(cat, parse_post(SAMPLE.replace("Black-115.500", "Black-120.000")
+                                     .replace("Adapter Apple 35W-2.500\n", "")))
+    lines = db.cart_lines(7)
+    assert [(l.qty, l.price, l.available) for l in lines] == [(2, 132000, True), (1, None, False)]
+
+    order_id = db.create_order(7, "Иван", "ivan", "+79001234567", "СДЭК", lines)
+    order = db.order(order_id)
+    assert order["total"] == 264000 and order["cost"] == 240000
+    assert db.order_items(order) == [
+        {"name": "18 Pro 256Gb Black 🇰🇷🇭🇰(1 sim+e sim)", "qty": 2, "price": 132000, "cost": 120000}
+    ]
+    assert db.cart_count(7) == 0

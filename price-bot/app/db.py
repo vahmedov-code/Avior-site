@@ -1,9 +1,11 @@
+import json
 import os
 import sqlite3
 import time
 from dataclasses import dataclass
 
 from .parser import Section
+from .pricing import apply_markup
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS categories (
@@ -30,7 +32,46 @@ CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
 );
+-- Корзина ссылается на позицию по названию, а не по id: при обновлении прайса
+-- позиции пересоздаются, а товар в корзине должен остаться.
+CREATE TABLE IF NOT EXISTS cart (
+    id          INTEGER PRIMARY KEY,
+    user_id     INTEGER NOT NULL,
+    category_id INTEGER NOT NULL,
+    section     TEXT NOT NULL,
+    name        TEXT NOT NULL,
+    note        TEXT NOT NULL,
+    qty         INTEGER NOT NULL DEFAULT 1,
+    UNIQUE (user_id, category_id, section, name, note)
+);
+CREATE TABLE IF NOT EXISTS orders (
+    id         INTEGER PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    user_name  TEXT NOT NULL,
+    username   TEXT,
+    phone      TEXT NOT NULL,
+    delivery   TEXT NOT NULL,
+    items      TEXT NOT NULL,
+    total      INTEGER NOT NULL,
+    cost       INTEGER NOT NULL,
+    status     TEXT NOT NULL DEFAULT 'new',
+    created_at INTEGER NOT NULL
+);
 """
+
+
+@dataclass
+class CartLine:
+    cart_id: int
+    label: str
+    category: str
+    qty: int
+    price: int | None  # цена продажи сейчас; None — позиции больше нет в прайсе
+    cost: int | None   # закупка
+
+    @property
+    def available(self) -> bool:
+        return self.price is not None
 
 
 @dataclass
@@ -197,3 +238,89 @@ class DB:
             if score > best_score:
                 best_id, best_score = cat["id"], score
         return best_id if best_score >= 0.3 else None
+
+    def item(self, item_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM items WHERE id = ?", (item_id,)).fetchone()
+
+    def sell_price(self, item: sqlite3.Row, category: sqlite3.Row | None = None) -> int:
+        category = category or self.category(item["category_id"])
+        return apply_markup(item["base_price"], *self.markup(category))
+
+    # --- корзина ---
+    def add_to_cart(self, user_id: int, item: sqlite3.Row) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO cart(user_id, category_id, section, name, note) VALUES(?, ?, ?, ?, ?) "
+                "ON CONFLICT(user_id, category_id, section, name, note) DO UPDATE SET qty = qty + 1",
+                (user_id, item["category_id"], item["section"], item["name"], item["note"]),
+            )
+
+    def cart_count(self, user_id: int) -> int:
+        return self.conn.execute("SELECT COALESCE(SUM(qty), 0) FROM cart WHERE user_id = ?", (user_id,)).fetchone()[0]
+
+    def cart_lines(self, user_id: int) -> list[CartLine]:
+        rows = self.conn.execute(
+            "SELECT c.*, i.base_price, cat.title AS cat_title, cat.markup_pct, cat.markup_fixed "
+            "FROM cart c "
+            "LEFT JOIN categories cat ON cat.id = c.category_id "
+            "LEFT JOIN items i ON i.category_id = c.category_id AND i.section = c.section "
+            "  AND i.name = c.name AND i.note = c.note "
+            "WHERE c.user_id = ? GROUP BY c.id ORDER BY c.id",
+            (user_id,),
+        ).fetchall()
+        lines = []
+        for r in rows:
+            price = cost = None
+            if r["base_price"] is not None:
+                cost = r["base_price"]
+                price = apply_markup(cost, *self.markup(r))
+            lines.append(
+                CartLine(
+                    cart_id=r["id"],
+                    label=_item_label(r["section"], r["name"], r["note"]),
+                    category=r["cat_title"] or "",
+                    qty=r["qty"],
+                    price=price,
+                    cost=cost,
+                )
+            )
+        return lines
+
+    def remove_cart_line(self, user_id: int, cart_id: int) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM cart WHERE id = ? AND user_id = ?", (cart_id, user_id))
+
+    def clear_cart(self, user_id: int) -> None:
+        with self.conn:
+            self.conn.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
+
+    # --- заказы ---
+    def create_order(self, user_id: int, user_name: str, username: str | None, phone: str, delivery: str,
+                     lines: list[CartLine]) -> int:
+        items = [
+            {"name": l.label, "qty": l.qty, "price": l.price, "cost": l.cost} for l in lines if l.available
+        ]
+        total = sum(i["qty"] * i["price"] for i in items)
+        cost = sum(i["qty"] * i["cost"] for i in items)
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO orders(user_id, user_name, username, phone, delivery, items, total, cost, created_at) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (user_id, user_name, username, phone, delivery, json.dumps(items, ensure_ascii=False), total, cost,
+                 int(time.time())),
+            )
+            self.conn.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
+        return cur.lastrowid
+
+    def order(self, order_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
+
+    def order_items(self, order: sqlite3.Row) -> list[dict]:
+        return json.loads(order["items"])
+
+    def set_order_status(self, order_id: int, status: str) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE orders SET status = ? WHERE id = ?", (status, order_id))
+
+    def recent_orders(self, limit: int = 10) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM orders ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
