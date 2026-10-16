@@ -29,7 +29,7 @@ CURRENCY_LETTERS = "рР₽"
 MEMORY_SIZES = {"064", "128", "256", "512"}
 
 # Служебные строки, которые не годятся в названия разделов
-BOILERPLATE_RE = re.compile(r"предзаказ|выдача|гаранти|в наличии|доставк|оплат|фото товара|количество ограничено",
+BOILERPLATE_RE = re.compile(r"предзаказ|выдача|гаранти|в наличии|доставк|оплат|фото товара|количество ограничено|оттенки на фото",
                             re.IGNORECASE)
 
 MIN_PRICE = 100
@@ -117,6 +117,8 @@ def parse_post(text: str, block_words: tuple[str, ...] = ()) -> list[Section]:
             continue
         if block and any(w in low for w in block):
             continue
+        if "🔙" in line:
+            continue  # «Samsung Phone 🔙🔙🔙» — ссылка-навигация на другую категорию
         if SPEC_RE.match(LEADING_JUNK_RE.sub("", line)):
             continue  # «Art: 010-02785-02» — артикул под товаром
         if line.count("·") >= 2:
@@ -128,7 +130,7 @@ def parse_post(text: str, block_words: tuple[str, ...] = ()) -> list[Section]:
         item = parse_line(line)
         if item:
             sections[-1].items.append(item)
-        elif (_letters(line) >= 3 and len(line) <= MAX_SECTION_TITLE
+        elif (_letters(line) >= 3 and len(line) <= MAX_SECTION_TITLE and not line.startswith(("•", "+"))
               and not RANGE_RE.match(LEADING_JUNK_RE.sub("", line))):
             title = TRAILING_SEP_RE.sub("", line)
             if sections[-1].items:

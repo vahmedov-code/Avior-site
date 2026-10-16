@@ -10,13 +10,17 @@ import re
 from bisect import bisect_left
 from dataclasses import dataclass, field
 
-from .parser import LEADING_JUNK_RE, Section, count_items, parse_post
+from .parser import BOILERPLATE_RE, LEADING_JUNK_RE, Section, count_items, parse_post
 from .rules import filter_sections
 
 LINK_ID_RE = re.compile(r"t\.me/(?:c/)?[^/\s]+/(\d+)")
 TITLE_JUNK_RE = re.compile(r"^[^\wА-Яа-яЁё]+")
 MIN_ITEMS_FALLBACK = 5
 MIN_ITEMS_EXTRA_POST = 3
+# Раздел без внятного названия длиннее этого делим по брендам
+SPLIT_BY_BRAND_OVER = 40
+GENERIC_WORDS = {"ноутбук", "игровой", "моноблок", "смартфон", "планшет", "новый", "new"}
+WORD_RE = re.compile(r"[A-Za-zА-Яа-яЁё][\w\-]*")
 
 
 @dataclass
@@ -128,7 +132,8 @@ def _attach_extra_posts(messages: list[dict], target_ids: list[int], block_words
     return extra
 
 
-def build_catalog(export: dict, block_words=(), exclude_words=(), skip_categories=()) -> Catalog:
+def build_catalog(export: dict, block_words=(), exclude_words=(), skip_categories=(), merge=None,
+                  only=None) -> Catalog:
     messages = [m for m in export.get("messages", []) if m.get("type", "message") == "message"]
     by_id = {m["id"]: m for m in messages if "id" in m}
     catalog = Catalog(source_chat_id=bot_api_chat_id(export))
@@ -151,20 +156,74 @@ def build_catalog(export: dict, block_words=(), exclude_words=(), skip_categorie
                 groups.append((sections[0].title or f"Пост №{msg['id']}", [msg]))
 
     skip = {c.strip().lower() for c in skip_categories}
+    # merge: {«игровые ноутбуки»: «Ноутбуки»} — несколько категорий поставщика в одну нашу
+    rename = {k.strip().lower(): v.strip() for k, v in (merge or {}).items()}
+    # only: {«пылесосы»: «dyson»} — из категории берём только позиции с этим словом
+    only_word = {k.strip().lower(): v.strip().lower() for k, v in (only or {}).items()}
+    combined: dict[str, CatalogCategory] = {}
     for title, msgs in groups:
+        title = title or f"Пост №{msgs[0]['id']}"
         if title.strip().lower() in skip:
             continue
+        keep_word = only_word.get(title.strip().lower())
+        title = rename.get(title.strip().lower(), title)
         sections = []
         for msg in msgs:
             sections += parse_post(message_text(msg), block_words)
+        if keep_word:
+            sections = _keep_only(sections, keep_word)
+        sections, skipped = filter_sections(_merge_sections(sections), exclude_words)
         if not sections:
             continue
-        sections, skipped = filter_sections(_merge_sections(sections), exclude_words)
-        if sections:
-            catalog.categories.append(
-                CatalogCategory(title or f"Пост №{msgs[0]['id']}", sections, skipped, msgs[0].get("id"))
-            )
+        sections = _split_big_sections(sections)
+        key = title.lower()
+        if key in combined:
+            cat = combined[key]
+            cat.sections = _merge_sections(cat.sections + sections)
+            cat.skipped += skipped
+        else:
+            combined[key] = CatalogCategory(title, sections, skipped, msgs[0].get("id"))
+            catalog.categories.append(combined[key])
     return catalog
+
+
+def _keep_only(sections: list[Section], word: str) -> list[Section]:
+    """Позиции, где слово есть в названии товара или раздела (Dyson V8 лежит в разделе «Dyson…»)."""
+    out = []
+    for s in sections:
+        if word in s.title.lower():
+            out.append(s)
+        else:
+            items = [it for it in s.items if word in it.name.lower()]
+            if items:
+                out.append(Section(title=s.title, items=items))
+    return out
+
+
+def _brand(name: str) -> str:
+    for word in WORD_RE.findall(name):
+        if word.lower() not in GENERIC_WORDS:
+            return word
+    return ""
+
+
+def _split_big_sections(sections: list[Section]) -> list[Section]:
+    """Длинный раздел без названия («», «Ноутбуки по предзаказу») режем по брендам:
+    листать 267 ноутбуков подряд в боте неудобно."""
+    out: list[Section] = []
+    for s in sections:
+        if len(s.items) <= SPLIT_BY_BRAND_OVER or (s.title and not BOILERPLATE_RE.search(s.title)):
+            out.append(s)
+            continue
+        by_brand: dict[str, Section] = {}
+        for it in s.items:
+            brand = _brand(it.name)
+            key = brand.lower()
+            if key not in by_brand:
+                by_brand[key] = Section(title=brand or s.title)
+            by_brand[key].items.append(it)
+        out += by_brand.values()
+    return _merge_sections(out)
 
 
 def _merge_sections(sections: list[Section]) -> list[Section]:
@@ -209,10 +268,10 @@ def catalog_from_json(data: dict) -> Catalog:
     return catalog
 
 
-def load_any(data: dict, block_words=(), exclude_words=(), skip_categories=()) -> Catalog:
+def load_any(data: dict, block_words=(), exclude_words=(), skip_categories=(), merge=None, only=None) -> Catalog:
     """Принимает и сырой экспорт Telegram, и уже собранный catalog.json."""
     if data.get("format") == "avior-catalog-1":
         return catalog_from_json(data)
     if "messages" in data:
-        return build_catalog(data, block_words, exclude_words, skip_categories)
+        return build_catalog(data, block_words, exclude_words, skip_categories, merge, only)
     raise ValueError("Это не экспорт Telegram (result.json) и не catalog.json")

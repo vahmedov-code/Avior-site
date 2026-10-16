@@ -12,7 +12,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BufferedInputFile, CallbackQuery, Message, MessageOriginChannel, TelegramObject
 
 from . import keyboards as kb
-from .catalog_import import (create_category, exclude_words, import_catalog, set_exclude_words,
+from .catalog_import import (catalog_filters, create_category, exclude_words, import_catalog, merge_categories,
+                             only_words, set_exclude_words, set_merge_categories, set_only_words,
                              set_skip_categories, skip_categories)
 from .config import Config
 from .db import DB, ImportDiff
@@ -36,8 +37,12 @@ HELP = """<b>Управление ботом</b>
 /exclude — список слов-исключений
 /exclude add ремешок — добавить слово
 /exclude del стекло — убрать слово
-/skipcat — категории поставщика, которые не загружаем (сейчас: телевизоры)
+/skipcat — категории поставщика, которые не загружаем (сейчас: телевизоры, быт. техника)
 /skipcat add Пылесосы · /skipcat del Телевизоры
+/mergecat — какие категории поставщика объединяем (сейчас: игровые ноутбуки → Ноутбуки, пылесосы → Dyson)
+/mergecat add Игровые Консоли = Гаджеты · /mergecat del Игровые Консоли
+/onlycat — из каких категорий берём только один бренд (сейчас: пылесосы → только Dyson)
+/onlycat add Пылесосы = dyson · /onlycat del Пылесосы
 
 <b>Наценка</b>
 /markup — текущая наценка
@@ -402,8 +407,7 @@ async def on_document(message: Message, bot: Bot, db: DB, cfg: Config):
     buf = io.BytesIO()
     await bot.download(doc, destination=buf)
     try:
-        catalog = load_any(json.loads(buf.getvalue().decode("utf-8")), cfg.block_words, exclude_words(db, cfg),
-                           skip_categories(db, cfg))
+        catalog = load_any(json.loads(buf.getvalue().decode("utf-8")), **catalog_filters(db, cfg))
     except (ValueError, UnicodeDecodeError) as e:
         await message.answer(f"Не получилось прочитать файл: {html.escape(str(e))}")
         return
@@ -465,3 +469,43 @@ async def cmd_skipcat(message: Message, command: CommandObject, db: DB, cfg: Con
         "🚫 Не загружаем категории поставщика: " + (html.escape(", ".join(sorted(titles))) or "—")
         + "\n\nНазвания — как на кнопках в меню поставщика. Уже загруженную категорию удалите через /cats и /delcat."
     )
+
+
+@router.message(Command("mergecat"))
+async def cmd_mergecat(message: Message, command: CommandObject, db: DB, cfg: Config):
+    mapping = merge_categories(db, cfg)
+    parts = (command.args or "").split(maxsplit=1)
+    if len(parts) == 2 and parts[0] == "add" and "=" in parts[1]:
+        src, dst = (x.strip() for x in parts[1].split("=", 1))
+        mapping = {k: v for k, v in mapping.items() if k.lower() != src.lower()}
+        mapping[src] = dst
+        set_merge_categories(db, mapping)
+    elif len(parts) == 2 and parts[0] == "del":
+        mapping = {k: v for k, v in mapping.items() if k.lower() != parts[1].strip().lower()}
+        set_merge_categories(db, mapping)
+    elif parts:
+        await message.answer("Пример: /mergecat add Игровые Ноутбуки = Ноутбуки или /mergecat del Игровые Ноутбуки")
+        return
+    lines = [f"• {html.escape(k)} → {html.escape(v)}" for k, v in sorted(mapping.items())] or ["—"]
+    await message.answer("🔗 Объединяем категории поставщика:\n" + "\n".join(lines)
+                         + "\n\nПрименится при следующей загрузке прайса. Старую категорию удалите через /cats и /delcat.")
+
+
+@router.message(Command("onlycat"))
+async def cmd_onlycat(message: Message, command: CommandObject, db: DB, cfg: Config):
+    mapping = only_words(db, cfg)
+    parts = (command.args or "").split(maxsplit=1)
+    if len(parts) == 2 and parts[0] == "add" and "=" in parts[1]:
+        src, word = (x.strip() for x in parts[1].split("=", 1))
+        mapping = {k: v for k, v in mapping.items() if k.lower() != src.lower()}
+        mapping[src] = word.lower()
+        set_only_words(db, mapping)
+    elif len(parts) == 2 and parts[0] == "del":
+        mapping = {k: v for k, v in mapping.items() if k.lower() != parts[1].strip().lower()}
+        set_only_words(db, mapping)
+    elif parts:
+        await message.answer("Пример: /onlycat add Пылесосы = dyson или /onlycat del Пылесосы")
+        return
+    lines = [f"• {html.escape(k)}: только «{html.escape(v)}»" for k, v in sorted(mapping.items())] or ["—"]
+    await message.answer("🎯 Из этих категорий поставщика берём только позиции со словом:\n" + "\n".join(lines)
+                         + "\n\nПрименится при следующей загрузке прайса.")

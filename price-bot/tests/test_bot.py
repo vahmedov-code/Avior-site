@@ -310,3 +310,34 @@ def test_rich_message_posts_multi_post_categories_and_skips():
 
     skipped = build_catalog(export, (), DEFAULT_EXCLUDE_WORDS, ("телевизоры",))
     assert "Телевизоры" not in {c.title for c in skipped.categories}
+
+
+def test_merge_categories():
+    export = {"name": "S", "type": "private_channel", "id": 1, "messages": [
+        {"id": 10, "type": "message", "text": "Ноутбуки\nAcer Aspire 3 — 66 400"},
+        {"id": 11, "type": "message", "text": "Игровые\nMSI Raider 18 — 555 300"},
+        {"id": 20, "type": "message", "text": "Меню", "inline_bot_buttons": [
+            [{"type": "url", "text": "Ноутбуки", "data": "https://t.me/S/10"}],
+            [{"type": "url", "text": "Игровые Ноутбуки", "data": "https://t.me/S/11"}]]},
+    ]}
+    catalog = build_catalog(export, merge={"Игровые Ноутбуки": "Ноутбуки"})
+    assert [c.title for c in catalog.categories] == ["Ноутбуки"]
+    assert [s.title for s in catalog.categories[0].sections] == ["Ноутбуки", "Игровые"]
+
+
+def test_only_word_and_merge_into_existing_category():
+    export = {"name": "S", "type": "private_channel", "id": 1, "messages": [
+        {"id": 10, "type": "message", "text": "Пылесосы\n➡ Dyson Пылесосы\nV8 SV25 Absolute — 30 000\n"
+                                              "Роботы\nDreame L10 — 40 000\nDyson Gen5 — 60 000"},
+        {"id": 11, "type": "message", "text": "Фены\nHD16 Red Velvet — 45 000"},
+        {"id": 12, "type": "message", "text": "Быт\nГазонокосилка Champion — 18 800"},
+        {"id": 20, "type": "message", "text": "Меню", "inline_bot_buttons": [
+            [{"type": "url", "text": "Пылесосы", "data": "https://t.me/S/10"}],
+            [{"type": "url", "text": "Dyson", "data": "https://t.me/S/11"}],
+            [{"type": "url", "text": "Быт.Техника", "data": "https://t.me/S/12"}]]},
+    ]}
+    catalog = build_catalog(export, skip_categories=("Быт.Техника",), merge={"Пылесосы": "Dyson"},
+                            only={"Пылесосы": "dyson"})
+    assert [c.title for c in catalog.categories] == ["Dyson"]
+    names = [it.name for s in catalog.categories[0].sections for it in s.items]
+    assert names == ["V8 SV25 Absolute", "Dyson Gen5", "HD16 Red Velvet"]

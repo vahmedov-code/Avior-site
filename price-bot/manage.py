@@ -14,7 +14,7 @@ import os
 import sys
 from datetime import date
 
-from app.catalog_import import exclude_words, import_catalog, skip_categories
+from app.catalog_import import catalog_filters, import_catalog
 from app.config import Config
 from app.db import DB
 from app.excel import build_xlsx
@@ -24,7 +24,7 @@ from app.telegram_export import catalog_to_json, load_any
 def load_catalog(path: str, db: DB, cfg: Config):
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
-    catalog = load_any(data, cfg.block_words, exclude_words(db, cfg), skip_categories(db, cfg))
+    catalog = load_any(data, **catalog_filters(db, cfg))
     if not catalog.categories:
         sys.exit("В файле не нашлось постов с ценами.")
     return catalog
@@ -67,7 +67,7 @@ def cmd_excel(args, cfg: Config) -> None:
             "markup_fixed": source.get_setting("markup_fixed") if source else cfg.default_markup_fixed,
             "round_step": source.get_setting("round_step") if source else cfg.default_round_step,
         })
-        for key in ("exclude_words", "skip_categories"):
+        for key in ("exclude_words", "skip_categories", "merge_categories", "only_words"):
             if source and source.get_setting(key) is not None:
                 db.set_setting(key, source.get_setting(key))
         results = import_catalog(db, cfg, load_catalog(args.file, db, cfg))

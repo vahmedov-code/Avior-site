@@ -36,6 +36,39 @@ def set_skip_categories(db: DB, titles) -> None:
     db.set_setting("skip_categories", "|".join(sorted({t.strip() for t in titles if t.strip()})))
 
 
+def merge_categories(db: DB, cfg: Config) -> dict[str, str]:
+    raw = db.get_setting("merge_categories")
+    if raw is None:
+        return dict(cfg.default_merge_categories)
+    return dict(pair.split("=", 1) for pair in raw.split("|") if "=" in pair)
+
+
+def only_words(db: DB, cfg: Config) -> dict[str, str]:
+    raw = db.get_setting("only_words")
+    if raw is None:
+        return dict(cfg.default_only_words)
+    return dict(pair.split("=", 1) for pair in raw.split("|") if "=" in pair)
+
+
+def set_only_words(db: DB, mapping: dict[str, str]) -> None:
+    db.set_setting("only_words", "|".join(f"{k}={v}" for k, v in sorted(mapping.items())))
+
+
+def catalog_filters(db: DB, cfg: Config) -> dict:
+    """Все настройки отбора для load_any/build_catalog."""
+    return {
+        "block_words": cfg.block_words,
+        "exclude_words": exclude_words(db, cfg),
+        "skip_categories": skip_categories(db, cfg),
+        "merge": merge_categories(db, cfg),
+        "only": only_words(db, cfg),
+    }
+
+
+def set_merge_categories(db: DB, mapping: dict[str, str]) -> None:
+    db.set_setting("merge_categories", "|".join(f"{k}={v}" for k, v in sorted(mapping.items())))
+
+
 def set_exclude_words(db: DB, words) -> None:
     db.set_setting("exclude_words", "|".join(sorted({w.strip().lower() for w in words if w.strip()})))
 
