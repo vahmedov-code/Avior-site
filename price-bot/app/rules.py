@@ -8,7 +8,7 @@ from .parser import Section
 DEFAULT_EXCLUDE_WORDS = (
     "чехол", "silicone case", "clear case", "leather case", "techwoven", "finewoven", "case with magsafe",
     "adapter", "адаптер", "зарядк", "charger", "кабель", "cable",
-    "гарант", "🛡", "стекло", "пленк", "плёнк", "ремеш",
+    "гарант", "🛡", "стекло", "пленк", "плёнк", "ремеш", "гравировк", "установка",
 )
 
 # Категории-аксессуары (по названию категории) получают «аксессуарную» наценку.

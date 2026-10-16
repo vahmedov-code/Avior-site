@@ -12,7 +12,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BufferedInputFile, CallbackQuery, Message, MessageOriginChannel, TelegramObject
 
 from . import keyboards as kb
-from .catalog_import import create_category, exclude_words, import_catalog, set_exclude_words
+from .catalog_import import (create_category, exclude_words, import_catalog, set_exclude_words,
+                             set_skip_categories, skip_categories)
 from .config import Config
 from .db import DB, ImportDiff
 from .handlers_user import ORDER_STATUS, render_order_for_admin
@@ -35,6 +36,8 @@ HELP = """<b>Управление ботом</b>
 /exclude — список слов-исключений
 /exclude add ремешок — добавить слово
 /exclude del стекло — убрать слово
+/skipcat — категории поставщика, которые не загружаем (сейчас: телевизоры)
+/skipcat add Пылесосы · /skipcat del Телевизоры
 
 <b>Наценка</b>
 /markup — текущая наценка
@@ -399,7 +402,8 @@ async def on_document(message: Message, bot: Bot, db: DB, cfg: Config):
     buf = io.BytesIO()
     await bot.download(doc, destination=buf)
     try:
-        catalog = load_any(json.loads(buf.getvalue().decode("utf-8")), cfg.block_words, exclude_words(db, cfg))
+        catalog = load_any(json.loads(buf.getvalue().decode("utf-8")), cfg.block_words, exclude_words(db, cfg),
+                           skip_categories(db, cfg))
     except (ValueError, UnicodeDecodeError) as e:
         await message.answer(f"Не получилось прочитать файл: {html.escape(str(e))}")
         return
@@ -440,4 +444,24 @@ async def cmd_excel(message: Message, db: DB):
     await message.answer_document(
         BufferedInputFile(buf.getvalue(), filename=f"AVIOR_price_{date.today():%Y-%m-%d}.xlsx"),
         caption=f"Прайс AVIOR: {rows} позиций",
+    )
+
+
+@router.message(Command("skipcat"))
+async def cmd_skipcat(message: Message, command: CommandObject, db: DB, cfg: Config):
+    titles = set(skip_categories(db, cfg))
+    parts = (command.args or "").split(maxsplit=1)
+    if len(parts) == 2 and parts[0] in ("add", "del"):
+        title = parts[1].strip()
+        if parts[0] == "add":
+            titles.add(title)
+        else:
+            titles = {t for t in titles if t.lower() != title.lower()}
+        set_skip_categories(db, titles)
+    elif parts:
+        await message.answer("Пример: /skipcat add Пылесосы или /skipcat del Телевизоры")
+        return
+    await message.answer(
+        "🚫 Не загружаем категории поставщика: " + (html.escape(", ".join(sorted(titles))) or "—")
+        + "\n\nНазвания — как на кнопках в меню поставщика. Уже загруженную категорию удалите через /cats и /delcat."
     )

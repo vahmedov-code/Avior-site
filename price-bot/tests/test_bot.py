@@ -227,3 +227,86 @@ def test_manage_excel_and_import(tmp_path):
     assert "Итого: 2 категорий, 14 позиций" in run("import", str(export))
     assert "Готово: catalog.json" in run("catalog", str(export))
     assert "цен изменилось 0" in run("import", str(tmp_path / "catalog.json"))
+
+
+# --- правила, найденные на настоящем экспорте канала ---
+
+@pytest.mark.parametrize(
+    "line, name, price",
+    [
+        ("Ballu BWH/S 30 Brief НС-1699356 6300", "Ballu BWH/S 30 Brief НС-1699356", 6300),  # артикул перед ценой
+        ("Firelight BFP/P-2520 Биокамин 34300", "Firelight BFP/P-2520 Биокамин", 34300),
+        ("Venu 3S Soft Gold/French Gray 33 500", "Venu 3S Soft Gold/French Gray", 33500),  # тысячи через пробел
+        ("Rikor NEURO 5 — 50 800", "Rikor NEURO 5", 50800),
+        ("ASUS GeForce RTX 5070 Ti 16GB — 89.000", "ASUS GeForce RTX 5070 Ti 16GB", 89000),
+        ("Canon I-SENSYS MF3010 ч/б F4 18ppm 2210", "Canon I-SENSYS MF3010 ч/б F4 18ppm", 2210),
+        ("Гравировка - 1000₽", "Гравировка", 1000),
+    ],
+)
+def test_parse_line_real_formats(line, name, price):
+    item = parse_line(line)
+    assert (item.name, item.price) == (name, price)
+
+
+@pytest.mark.parametrize("line", [
+    "Watch Ultra 4 2026🔥", "Год выпуска: 2023", "IPHONE 17 256", "Art: 010-02785-02",
+    "➡️ До 140.000", "➡️ От 120.000 до 200.000", "Core Ultra 5 115U · 16 GB RAM · 512 GB SSD",
+])
+def test_parse_line_not_a_price(line):
+    assert parse_line(line) is None
+
+
+def test_spec_lines_become_notes_and_articles_are_skipped():
+    sections = parse_post(
+        "Ноутбуки\n"
+        "Acer Nitro V 15 — 130 200\n"
+        "Core i9-13900H · 16 GB RAM · 512 GB SSD · RTX 5060 8 GB\n"
+        "Venu 3S Gray 33 500\n"
+        "Art: 010-02785-02\n"
+    )
+    assert len(sections) == 1 and sections[0].title == "Ноутбуки"
+    acer, venu = sections[0].items
+    assert (acer.price, acer.note) == (130200, "Core i9-13900H · 16 GB RAM · 512 GB SSD · RTX 5060 8 GB")
+    assert venu.price == 33500
+
+
+def test_boilerplate_does_not_replace_section_title():
+    sections = parse_post("Саундбары\nВсе саундбары только по предзаказу\nВыдача в день заказа\nHisense AX 5 — 30 000\n")
+    assert sections[0].title == "Саундбары"
+
+
+def _rich(*lines):
+    return {"blocks": [{"type": "paragraph", "text": {"type": "concat", "text": [
+        {"type": "bold", "text": {"type": "plain", "text": line}}]}} for line in lines]}
+
+
+def test_rich_message_posts_multi_post_categories_and_skips():
+    export = {
+        "name": "Shop", "type": "private_channel", "id": 42,
+        "messages": [
+            {"id": 1, "type": "message", "text": "Маркировка: Год выпуска: 2023"},
+            {"id": 10, "type": "message", "text": "Колонки\nJBL Go 4 — 4.500\nJBL Flip 7 — 12.000\nJBL Charge 6 — 18.000"},
+            {"id": 11, "type": "message", "text": "Logitech Z150 - 3.300\nLogitech Z313 - 5.400\nLogitech Z333 - 7.900"},
+            {"id": 12, "type": "message", "text": "Саундбары\nВсе саундбары по предзаказу\nHisense AX5 — 30 000\n"
+                                                  "Hisense AX3 — 25 000\nLG S40 — 20 000"},
+            {"id": 13, "type": "message", "text": "➡ Саундбары\nSamsung Q600 — 40 000\n➡ Телевизоры\nLG 55UT80 — 60 000"},
+            {"id": 14, "type": "message", "rich_message": _rich("iPhone 18 Pro", "18 Pro 256 Black-115.500")},
+            {"id": 15, "type": "message", "rich_message": _rich("iPhone Duo 256 Star White", "Цен пока нет")},
+            {"id": 20, "type": "message", "text": "Меню", "inline_bot_buttons": [
+                [{"type": "url", "text": "Колонки", "data": "https://t.me/Shop/10"}],
+                [{"type": "url", "text": "Телевизоры", "data": "https://t.me/Shop/13"}],
+                [{"type": "url", "text": "iPhone 18 Pro", "data": "https://t.me/Shop/14"}],
+                [{"type": "url", "text": "iPhone Duo", "data": "https://t.me/Shop/15"}],
+            ]},
+        ],
+    }
+    catalog = build_catalog(export, (), DEFAULT_EXCLUDE_WORDS)
+    by_title = {c.title: c for c in catalog.categories}
+    # Logitech без кнопки — к предыдущим колонкам; саундбары — к следующей категории, где есть такой раздел
+    assert [it.name for s in by_title["Колонки"].sections for it in s.items][-1] == "Logitech Z333"
+    assert [(s.title, len(s.items)) for s in by_title["Телевизоры"].sections] == [("➡ Саундбары", 4), ("➡ Телевизоры", 1)]
+    assert by_title["iPhone 18 Pro"].sections[0].items[0].price == 115500  # rich_message
+    assert "iPhone Duo" not in by_title  # без цен категории нет
+
+    skipped = build_catalog(export, (), DEFAULT_EXCLUDE_WORDS, ("телевизоры",))
+    assert "Телевизоры" not in {c.title for c in skipped.categories}

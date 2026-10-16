@@ -7,14 +7,16 @@
 from __future__ import annotations
 
 import re
+from bisect import bisect_left
 from dataclasses import dataclass, field
 
-from .parser import Section, count_items, parse_post
+from .parser import LEADING_JUNK_RE, Section, count_items, parse_post
 from .rules import filter_sections
 
 LINK_ID_RE = re.compile(r"t\.me/(?:c/)?[^/\s]+/(\d+)")
 TITLE_JUNK_RE = re.compile(r"^[^\wА-Яа-яЁё]+")
 MIN_ITEMS_FALLBACK = 5
+MIN_ITEMS_EXTRA_POST = 3
 
 
 @dataclass
@@ -31,7 +33,30 @@ class Catalog:
     categories: list[CatalogCategory] = field(default_factory=list)
 
 
+def _rich_text(node) -> str:
+    """Текст узла rich_message: plain/bold/concat/... вложены друг в друга."""
+    if isinstance(node, str):
+        return node
+    if isinstance(node, list):
+        return "".join(_rich_text(n) for n in node)
+    if isinstance(node, dict):
+        if node.get("type") in ("photo", "video"):
+            return ""
+        return _rich_text(node.get("text", ""))
+    return ""
+
+
 def message_text(msg: dict) -> str:
+    rich = msg.get("rich_message")
+    if isinstance(rich, dict) and rich.get("blocks"):
+        # Новый формат постов: каждый блок-абзац — отдельная строка
+        lines = []
+        for block in rich["blocks"]:
+            if block.get("type") == "paragraph":
+                lines.append(_rich_text(block.get("text")))
+            elif block.get("caption"):
+                lines.append(_rich_text(block["caption"]))
+        return "\n".join(lines)
     text = msg.get("text", "")
     if isinstance(text, list):
         return "".join(p if isinstance(p, str) else p.get("text", "") for p in text)
@@ -70,7 +95,40 @@ def bot_api_chat_id(export: dict) -> int | None:
     return -raw
 
 
-def build_catalog(export: dict, block_words=(), exclude_words=()) -> Catalog:
+def _heading_key(title: str) -> str:
+    return LEADING_JUNK_RE.sub("", title).strip().lower()
+
+
+def _attach_extra_posts(messages: list[dict], target_ids: list[int], block_words) -> dict[int, list[dict]]:
+    """Категория у поставщика часто занимает несколько постов подряд, а кнопка меню
+    ведёт только на первый. Пост без кнопки относим к предыдущей категории. К следующей —
+    только если его первый раздел так же назван в следующей категории и не назван
+    в предыдущей (саундбары стоят перед телевизорами)."""
+    parsed = {m["id"]: parse_post(message_text(m), block_words) for m in messages}
+
+    def headings(msg_id: int) -> set[str]:
+        return {_heading_key(s.title) for s in parsed[msg_id] if s.title}
+
+    ordered = sorted(target_ids)
+    extra: dict[int, list[dict]] = {t: [] for t in ordered}
+    for msg in sorted(messages, key=lambda m: m["id"]):
+        mid = msg["id"]
+        if mid in extra or count_items(parsed[mid]) < MIN_ITEMS_EXTRA_POST:
+            continue
+        pos = bisect_left(ordered, mid)
+        prev_t = ordered[pos - 1] if pos > 0 else None
+        next_t = ordered[pos] if pos < len(ordered) else None
+        if prev_t is None:
+            continue  # до первой категории — служебные посты
+        owner = prev_t
+        first = _heading_key(parsed[mid][0].title)
+        if next_t is not None and first and first in headings(next_t) and first not in headings(prev_t):
+            owner = next_t
+        extra[owner].append(msg)
+    return extra
+
+
+def build_catalog(export: dict, block_words=(), exclude_words=(), skip_categories=()) -> Catalog:
     messages = [m for m in export.get("messages", []) if m.get("type", "message") == "message"]
     by_id = {m["id"]: m for m in messages if "id" in m}
     catalog = Catalog(source_chat_id=bot_api_chat_id(export))
@@ -82,20 +140,43 @@ def build_catalog(export: dict, block_words=(), exclude_words=()) -> Catalog:
             seen.add(msg_id)
             targets.append((title, by_id[msg_id]))
 
-    if not targets:
+    if targets:
+        extra = _attach_extra_posts(messages, [m["id"] for _, m in targets], block_words)
+        groups = [(title, [msg] + extra[msg["id"]]) for title, msg in targets]
+    else:
+        groups = []
         for msg in messages:
             sections = parse_post(message_text(msg), block_words)
             if count_items(sections) >= MIN_ITEMS_FALLBACK:
-                targets.append((sections[0].title or f"Пост №{msg['id']}", msg))
+                groups.append((sections[0].title or f"Пост №{msg['id']}", [msg]))
 
-    for title, msg in targets:
-        sections = parse_post(message_text(msg), block_words)
+    skip = {c.strip().lower() for c in skip_categories}
+    for title, msgs in groups:
+        if title.strip().lower() in skip:
+            continue
+        sections = []
+        for msg in msgs:
+            sections += parse_post(message_text(msg), block_words)
         if not sections:
             continue
-        sections, skipped = filter_sections(sections, exclude_words)
+        sections, skipped = filter_sections(_merge_sections(sections), exclude_words)
         if sections:
-            catalog.categories.append(CatalogCategory(title or f"Пост №{msg['id']}", sections, skipped, msg.get("id")))
+            catalog.categories.append(
+                CatalogCategory(title or f"Пост №{msgs[0]['id']}", sections, skipped, msgs[0].get("id"))
+            )
     return catalog
+
+
+def _merge_sections(sections: list[Section]) -> list[Section]:
+    """Одноимённые разделы из разных постов склеиваем в один."""
+    merged: dict[str, Section] = {}
+    for s in sections:
+        key = _heading_key(s.title)  # «Саундбары» и «➡ Саундбары» — один раздел
+        if key in merged:
+            merged[key].items.extend(s.items)
+        else:
+            merged[key] = Section(title=s.title, items=list(s.items))
+    return list(merged.values())
 
 
 def catalog_to_json(catalog: Catalog) -> dict:
@@ -128,10 +209,10 @@ def catalog_from_json(data: dict) -> Catalog:
     return catalog
 
 
-def load_any(data: dict, block_words=(), exclude_words=()) -> Catalog:
+def load_any(data: dict, block_words=(), exclude_words=(), skip_categories=()) -> Catalog:
     """Принимает и сырой экспорт Telegram, и уже собранный catalog.json."""
     if data.get("format") == "avior-catalog-1":
         return catalog_from_json(data)
     if "messages" in data:
-        return build_catalog(data, block_words, exclude_words)
+        return build_catalog(data, block_words, exclude_words, skip_categories)
     raise ValueError("Это не экспорт Telegram (result.json) и не catalog.json")

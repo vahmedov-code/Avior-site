@@ -47,6 +47,7 @@ class Config:
     accessory_markup_fixed: int = 5000
     accessory_words: tuple[str, ...] = DEFAULT_ACCESSORY_WORDS
     default_exclude_words: tuple[str, ...] = DEFAULT_EXCLUDE_WORDS
+    default_skip_categories: tuple[str, ...] = ("Телевизоры",)
 
     @classmethod
     def from_env(cls, for_bot: bool = True) -> "Config":
@@ -76,4 +77,7 @@ class Config:
             accessory_markup_fixed=int(os.getenv("ACCESSORY_MARKUP", "5000")),
             accessory_words=_words("ACCESSORY_WORDS", DEFAULT_ACCESSORY_WORDS),
             default_exclude_words=_words("EXCLUDE_WORDS", DEFAULT_EXCLUDE_WORDS),
+            default_skip_categories=tuple(
+                c.strip() for c in os.getenv("SKIP_CATEGORIES", "Телевизоры").split(",") if c.strip()
+            ),
         )

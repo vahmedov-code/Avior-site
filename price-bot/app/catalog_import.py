@@ -25,6 +25,17 @@ def exclude_words(db: DB, cfg: Config) -> tuple[str, ...]:
     return tuple(w for w in raw.split("|") if w)
 
 
+def skip_categories(db: DB, cfg: Config) -> tuple[str, ...]:
+    raw = db.get_setting("skip_categories")
+    if raw is None:
+        return cfg.default_skip_categories
+    return tuple(c for c in raw.split("|") if c)
+
+
+def set_skip_categories(db: DB, titles) -> None:
+    db.set_setting("skip_categories", "|".join(sorted({t.strip() for t in titles if t.strip()})))
+
+
 def set_exclude_words(db: DB, words) -> None:
     db.set_setting("exclude_words", "|".join(sorted({w.strip().lower() for w in words if w.strip()})))
 
