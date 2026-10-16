@@ -36,7 +36,7 @@ echo "Бэкап текущей версии на сервере..."
 ssh -i "$SSH_KEY" "$SERVER" "mkdir -p /root/backups && tar czf /root/backups/avior-\$(date +%Y%m%d-%H%M%S).tar.gz -C /var/www avior"
 
 echo "Синхронизация файлов на сервер..."
-FILES=$(git ls-files | grep -v '^\.github/')
+FILES=$(git ls-files | grep -v -e '^\.github/' -e '^price-bot/')
 git archive HEAD -- $FILES | ssh -i "$SSH_KEY" "$SERVER" "rm -rf /root/deploy/staging && mkdir -p /root/deploy/staging && tar -x -C /root/deploy/staging && rsync -a /root/deploy/staging/ $REMOTE_PATH/ && chown -R www-data:www-data $REMOTE_PATH"
 
 echo "Готово. Задеплоена версия REV $NEW на avior.moscow"

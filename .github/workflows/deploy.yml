@@ -23,6 +23,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Exclude Telegram bot from site
+        run: rm -rf price-bot
       - name: Setup Pages
         uses: actions/configure-pages@v5
       - name: Upload artifact
