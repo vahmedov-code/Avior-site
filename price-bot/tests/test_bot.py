@@ -353,3 +353,16 @@ def test_category_icons():
     assert with_icon("📱 Своя") == "📱 Своя"
     assert with_icon("Игровые Консоли") == "🎮 Игровые Консоли"
     assert with_icon("Что-то новое") == "Что-то новое"
+
+
+def test_section_names_for_phone_categories():
+    export = {"name": "S", "type": "private_channel", "id": 1, "messages": [
+        {"id": 10, "type": "message", "text": "Получите дополнительную гарантию!\n🛡 +1 месяц -1.000\n"
+                                              "🇦🇪 A07 4/64 Black — 9 500\n🇦🇪 Z Flip 8 12/256Gb Pink — 🚗\n"
+                                              "Z Flip 8 12/256 Black — 95 000\n🔌Блок Samsung 25W — 1 200"},
+        {"id": 20, "type": "message", "text": "Меню", "inline_bot_buttons": [
+            [{"type": "url", "text": "Samsung", "data": "https://t.me/S/10"}]]},
+    ]}
+    cat = build_catalog(export, exclude_words=DEFAULT_EXCLUDE_WORDS).categories[0]
+    assert [(s.title, [it.name for it in s.items]) for s in cat.sections] == [
+        ("Смартфоны", ["🇦🇪 A07 4/64 Black", "Z Flip 8 12/256 Black"])]

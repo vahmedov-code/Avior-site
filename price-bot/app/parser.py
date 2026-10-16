@@ -32,6 +32,9 @@ MEMORY_SIZES = {"064", "128", "256", "512"}
 BOILERPLATE_RE = re.compile(r"предзаказ|выдача|гаранти|в наличии|доставк|оплат|фото товара|количество ограничено|оттенки на фото",
                             re.IGNORECASE)
 
+# «Z Flip 8 12/256Gb Pink — 🚗» — товар без цены (в пути), не заголовок раздела
+NO_PRICE_ITEM_RE = re.compile(r"[-–—]\s*[^\w\s]*$")
+
 MIN_PRICE = 100
 MAX_SECTION_TITLE = 80
 
@@ -131,6 +134,7 @@ def parse_post(text: str, block_words: tuple[str, ...] = ()) -> list[Section]:
         if item:
             sections[-1].items.append(item)
         elif (_letters(line) >= 3 and len(line) <= MAX_SECTION_TITLE and not line.startswith(("•", "+"))
+              and not NO_PRICE_ITEM_RE.search(line) and "🚗" not in line and "🚘" not in line
               and not RANGE_RE.match(LEADING_JUNK_RE.sub("", line))):
             title = TRAILING_SEP_RE.sub("", line)
             if sections[-1].items:

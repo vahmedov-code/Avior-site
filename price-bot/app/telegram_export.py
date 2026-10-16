@@ -21,6 +21,7 @@ MIN_ITEMS_EXTRA_POST = 3
 SPLIT_BY_BRAND_OVER = 40
 GENERIC_WORDS = {"ноутбук", "игровой", "моноблок", "смартфон", "планшет", "новый", "new"}
 WORD_RE = re.compile(r"[A-Za-zА-Яа-яЁё][\w\-]*")
+PHONE_CATEGORY_WORDS = ("iphone", "samsung", "xiaomi", "poco", "huawei", "honor", "pixel", "one plus")
 
 
 @dataclass
@@ -175,7 +176,7 @@ def build_catalog(export: dict, block_words=(), exclude_words=(), skip_categorie
         sections, skipped = filter_sections(_merge_sections(sections), exclude_words)
         if not sections:
             continue
-        sections = _split_big_sections(sections)
+        sections = _name_sections(_split_big_sections(sections), title)
         key = title.lower()
         if key in combined:
             cat = combined[key]
@@ -185,6 +186,17 @@ def build_catalog(export: dict, block_words=(), exclude_words=(), skip_categorie
             combined[key] = CatalogCategory(title, sections, skipped, msgs[0].get("id"))
             catalog.categories.append(combined[key])
     return catalog
+
+
+def _name_sections(sections: list[Section], category: str) -> list[Section]:
+    """Раздел без названия или со служебным («Получите дополнительную гарантию…»)
+    называем «Смартфоны» в телефонных категориях, иначе — как категорию."""
+    low = category.lower()
+    fallback = "Смартфоны" if any(w in low for w in PHONE_CATEGORY_WORDS) else category
+    for s in sections:
+        if not s.title or BOILERPLATE_RE.search(s.title):
+            s.title = fallback
+    return _merge_sections(sections)
 
 
 def _keep_only(sections: list[Section], word: str) -> list[Section]:
@@ -201,9 +213,11 @@ def _keep_only(sections: list[Section], word: str) -> list[Section]:
 
 
 def _brand(name: str) -> str:
+    """Бренд — первое слово из букв (Lenovo, MSI). «A07», «Z» — это модели, не бренды."""
     for word in WORD_RE.findall(name):
-        if word.lower() not in GENERIC_WORDS:
-            return word
+        if word.lower() in GENERIC_WORDS:
+            continue
+        return word if word.isalpha() and len(word) >= 2 else ""
     return ""
 
 
