@@ -122,3 +122,108 @@ def test_cart_survives_price_update_and_order():
         {"name": "18 Pro 256Gb Black 🇰🇷🇭🇰(1 sim+e sim)", "qty": 2, "price": 132000, "cost": 120000}
     ]
     assert db.cart_count(7) == 0
+
+
+# --- экспорт Telegram Desktop, исключения, наценки по категориям, manage.py ---
+
+import json  # noqa: E402
+import subprocess  # noqa: E402
+import sys  # noqa: E402
+
+from app.catalog_import import import_catalog  # noqa: E402
+from app.config import Config  # noqa: E402
+from app.rules import DEFAULT_EXCLUDE_WORDS, filter_sections  # noqa: E402
+from app.telegram_export import build_catalog, catalog_to_json, load_any  # noqa: E402
+
+AIRPODS_POST = """AirPods
+AirPods Pro 3-21.500
+AirPods 4 ANC-13.000
+AirPods Max USB-C Midnight-45.000
+Чехол для AirPods Pro 3 - 1.500
+"""
+
+
+def make_export():
+    return {
+        "name": "BigSale", "type": "public_channel", "id": 1234567890,
+        "messages": [
+            {"id": 10, "type": "message", "text": "Меню",
+             "inline_bot_buttons": [
+                 [{"type": "url", "text": "📱 iPhone 18 Pro", "data": "https://t.me/BigSaleApple/12970"}],
+                 [{"type": "url", "text": "🎧 AirPods", "data": "https://t.me/BigSaleApple/12971"}],
+                 [{"type": "url", "text": "VK", "data": "https://vk.com/bigsale"}],
+                 [{"type": "url", "text": "Trade-In", "data": "https://t.me/BigSaleApple/5"}],
+             ]},
+            {"id": 12970, "type": "message", "text": [SAMPLE[:400], {"type": "bold", "text": SAMPLE[400:]}]},
+            {"id": 12971, "type": "message", "text": AIRPODS_POST},
+            {"id": 5, "type": "message", "text": "Сдайте старый телефон в Trade-In!"},
+        ],
+    }
+
+
+def cfg_for_tests():
+    return Config(
+        bot_token="", admin_ids=frozenset(), shop_name="AVIOR Shop", welcome_text="", contacts_text="",
+        db_path=":memory:", default_markup_pct=0, default_markup_fixed=10000, default_round_step=100,
+        block_words=("bigsale",), timezone="Europe/Moscow",
+    )
+
+
+def test_exclusions_drop_cases_chargers_warranty():
+    sections, skipped = filter_sections(parse_post(SAMPLE), DEFAULT_EXCLUDE_WORDS)
+    names = [it.name for s in sections for it in s.items]
+    assert all("Case" not in n and "Adapter" not in n and "MagSafe" not in n for n in names)
+    assert not any(n.startswith("🛡") for n in names)
+    assert skipped == 14 and len(names) == 11  # остались только телефоны
+
+
+def test_build_catalog_from_export():
+    catalog = build_catalog(make_export(), ("bigsale",), DEFAULT_EXCLUDE_WORDS)
+    assert catalog.source_chat_id == -1001234567890
+    assert [(c.title, c.source_msg_id) for c in catalog.categories] == [("iPhone 18 Pro", 12970), ("AirPods", 12971)]
+    airpods = catalog.categories[1]
+    assert [it.name for it in airpods.sections[0].items] == ["AirPods Pro 3", "AirPods 4 ANC", "AirPods Max USB-C Midnight"]
+    assert airpods.skipped == 1
+    # catalog.json туда-обратно
+    again = load_any(json.loads(json.dumps(catalog_to_json(catalog))))
+    assert again.categories[1].sections == airpods.sections
+
+
+def test_import_catalog_markups_by_category():
+    cfg = cfg_for_tests()
+    db = DB(":memory:")
+    db.init_defaults({"markup_pct": 0, "markup_fixed": 10000, "round_step": 100})
+    results = import_catalog(db, cfg, build_catalog(make_export(), ("bigsale",), DEFAULT_EXCLUDE_WORDS))
+    assert [r.created for r in results] == [True, True]
+    phones, airpods = results
+    phone = db.items(phones.cat_id)[0]
+    assert db.sell_price(phone) == 115500 + 10000
+    pods = db.items(airpods.cat_id)[0]
+    assert db.sell_price(pods) == 21500 + 5000
+    # повторный импорт находит те же категории, а пересланный пост — по источнику
+    again = import_catalog(db, cfg, build_catalog(make_export(), ("bigsale",), DEFAULT_EXCLUDE_WORDS))
+    assert [r.created for r in again] == [False, False]
+    assert db.find_by_source(-1001234567890, 12971)["id"] == airpods.cat_id
+
+
+def test_manage_excel_and_import(tmp_path):
+    export = tmp_path / "result.json"
+    export.write_text(json.dumps(make_export(), ensure_ascii=False), encoding="utf-8")
+    env = {"PATH": "/usr/bin:/bin", "DB_PATH": str(tmp_path / "shop.db"), "HOME": str(tmp_path)}
+    root = Path(__file__).parent.parent
+    run = lambda *a: subprocess.run([sys.executable, str(root / "manage.py"), *a], cwd=tmp_path, env=env,  # noqa: E731
+                                    capture_output=True, text=True, check=True).stdout
+
+    out = run("excel", str(export), "-o", str(tmp_path / "p.xlsx"))
+    assert "p.xlsx (14 позиций)" in out and not (tmp_path / "shop.db").exists()
+
+    from openpyxl import load_workbook
+    ws = load_workbook(tmp_path / "p.xlsx").active
+    rows = list(ws.values)
+    assert rows[1] == ("iPhone 18 Pro", "iPhone 18 Pro 256/512/1TB/2TB", "18 Pro 256Gb Black",
+                       "🇰🇷🇭🇰(1 sim+e sim)", 115500, 10000, 125500)
+    assert rows[-1][0] == "AirPods" and rows[-1][6] == 50000
+
+    assert "Итого: 2 категорий, 14 позиций" in run("import", str(export))
+    assert "Готово: catalog.json" in run("catalog", str(export))
+    assert "цен изменилось 0" in run("import", str(tmp_path / "catalog.json"))

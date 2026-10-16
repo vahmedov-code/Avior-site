@@ -324,3 +324,9 @@ class DB:
 
     def recent_orders(self, limit: int = 10) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM orders ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
+
+    def find_category_by_title(self, title: str) -> sqlite3.Row | None:
+        for c in self.categories():
+            if c["title"].strip().lower() == title.strip().lower():
+                return c
+        return None

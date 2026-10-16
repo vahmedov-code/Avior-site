@@ -1,25 +1,40 @@
 """Команды владельца: импорт прайса пересылкой поста, наценки, категории."""
 import html
+import io
+import json
+from datetime import date
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command, CommandObject, Filter, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import CallbackQuery, Message, MessageOriginChannel, TelegramObject
+from aiogram.types import BufferedInputFile, CallbackQuery, Message, MessageOriginChannel, TelegramObject
 
 from . import keyboards as kb
+from .catalog_import import create_category, exclude_words, import_catalog, set_exclude_words
 from .config import Config
 from .db import DB, ImportDiff
 from .handlers_user import ORDER_STATUS, render_order_for_admin
+from .excel import build_xlsx
 from .parser import count_items, parse_post
 from .pricing import apply_markup, fmt_price
+from .rules import filter_sections
+from .telegram_export import load_any
 
 router = Router(name="admin")
 
 HELP = """<b>Управление ботом</b>
 
-<b>Обновить цены:</b> перешлите сюда пост с прайсом из группы поставщика. Бот спросит, в какую категорию его положить, и запомнит это — в следующий раз тот же пост обновится сам.
+<b>Обновить цены:</b>
+• перешлите сюда пост с прайсом из группы поставщика — бот спросит категорию (один раз) и запомнит;
+• или отправьте файл экспорта группы <code>result.json</code> (или <code>catalog.json</code> из manage.py) — обновятся все категории сразу.
+/excel — выгрузить текущий прайс в Excel
+
+<b>Что не продаём</b> (чехлы, зарядки, доп. гарантия)
+/exclude — список слов-исключений
+/exclude add ремешок — добавить слово
+/exclude del стекло — убрать слово
 
 <b>Наценка</b>
 /markup — текущая наценка
@@ -64,7 +79,7 @@ def markup_text(pct: float, fixed: int) -> str:
     return " и ".join(parts)
 
 
-def format_report(db: DB, cat_id: int, diff: ImportDiff) -> str:
+def format_report(db: DB, cat_id: int, diff: ImportDiff, skipped: int = 0) -> str:
     cat = db.category(cat_id)
     pct, fixed, step = db.markup(cat)
     sell = lambda p: fmt_price(apply_markup(p, pct, fixed, step))  # noqa: E731
@@ -73,6 +88,8 @@ def format_report(db: DB, cat_id: int, diff: ImportDiff) -> str:
         f"Позиций: {diff.total} (было {diff.previous})",
         f"Наценка: {markup_text(pct, fixed)}, округление до {step} ₽",
     ]
+    if skipped:
+        lines.append(f"🚫 пропущено (чехлы, зарядки, гарантия…): {skipped}")
     if diff.previous:
         lines.append(f"➕ новых: {len(diff.added)}  ➖ убрано: {len(diff.removed)}  💱 цена изменилась: {len(diff.changed)}")
     for name, old, new in diff.changed[:15]:
@@ -106,17 +123,26 @@ class HasPrices(Filter):
         return {"sections": sections, "post_text": text}
 
 
+def prepare(db: DB, cfg: Config, text: str):
+    return filter_sections(parse_post(text, cfg.block_words), exclude_words(db, cfg))
+
+
 # --- импорт прайса ---
 
 @router.message(StateFilter(None, ImportFlow.choose, ImportFlow.new_title), HasPrices())
-async def on_price_post(message: Message, state: FSMContext, db: DB, sections, post_text: str):
+async def on_price_post(message: Message, state: FSMContext, db: DB, cfg: Config, post_text: str, **_):
+    sections, skipped = prepare(db, cfg, post_text)
+    if not sections:
+        await message.answer(f"В посте только то, что мы не продаём ({skipped} поз.: чехлы, зарядки, гарантия…). "
+                             "Пропускаю. Список исключений — /exclude")
+        return
     src = source_of(message)
     if src:
         cat = db.find_by_source(*src)
         if cat:
             diff = db.replace_items(cat["id"], sections)
             await state.clear()
-            await message.answer(format_report(db, cat["id"], diff))
+            await message.answer(format_report(db, cat["id"], diff, skipped))
             return
 
     await state.set_state(ImportFlow.choose)
@@ -132,11 +158,11 @@ async def on_price_post(message: Message, state: FSMContext, db: DB, sections, p
 async def finish_import(message: Message, state: FSMContext, db: DB, cfg: Config, cat_id: int):
     data = await state.get_data()
     await state.clear()
-    sections = parse_post(data["post_text"], cfg.block_words)
+    sections, skipped = prepare(db, cfg, data["post_text"])
     if data.get("source"):
         db.set_source(cat_id, *data["source"])
     diff = db.replace_items(cat_id, sections)
-    await message.answer(format_report(db, cat_id, diff))
+    await message.answer(format_report(db, cat_id, diff, skipped))
 
 
 @router.callback_query(StateFilter(ImportFlow.choose), F.data.startswith("imp:"))
@@ -160,7 +186,7 @@ async def cb_import_new(call: CallbackQuery, state: FSMContext):
 
 @router.message(StateFilter(ImportFlow.new_title), F.text, ~F.text.startswith("/"))
 async def on_new_title(message: Message, state: FSMContext, db: DB, cfg: Config):
-    cat_id = db.add_category(message.text.strip()[:60])
+    cat_id = create_category(db, cfg, message.text)
     await finish_import(message, state, db, cfg, cat_id)
 
 
@@ -232,12 +258,12 @@ async def cmd_cats(message: Message, db: DB):
 
 
 @router.message(Command("newcat"))
-async def cmd_newcat(message: Message, command: CommandObject, db: DB):
+async def cmd_newcat(message: Message, command: CommandObject, db: DB, cfg: Config):
     title = (command.args or "").strip()
     if not title:
         await message.answer("Пример: /newcat iPhone 18 Pro")
         return
-    cat_id = db.add_category(title[:60])
+    cat_id = create_category(db, cfg, title)
     await message.answer(f"Создана категория №{cat_id}: {html.escape(title)}")
 
 
@@ -331,3 +357,87 @@ async def cmd_orders(message: Message, db: DB):
             f"{who} · {html.escape(o['phone'])}"
         )
     await message.answer("\n".join(lines))
+
+
+# --- исключения ---
+
+@router.message(Command("exclude"))
+async def cmd_exclude(message: Message, command: CommandObject, db: DB, cfg: Config):
+    words = set(exclude_words(db, cfg))
+    parts = (command.args or "").split(maxsplit=1)
+    if len(parts) == 2 and parts[0] in ("add", "del"):
+        word = parts[1].strip().lower()
+        if parts[0] == "add":
+            words.add(word)
+        else:
+            words.discard(word)
+        set_exclude_words(db, words)
+    elif parts:
+        await message.answer("Пример: /exclude add ремешок или /exclude del стекло")
+        return
+    await message.answer(
+        "🚫 Не продаём позиции, в названии которых есть:\n"
+        + html.escape(", ".join(sorted(words)))
+        + "\n\nа также строки доп. гарантии «+1 месяц …». Применяется при следующем обновлении прайса."
+    )
+
+
+# --- файл экспорта и Excel ---
+
+@router.message(F.document)
+async def on_document(message: Message, bot: Bot, db: DB, cfg: Config):
+    doc = message.document
+    if not (doc.file_name or "").lower().endswith(".json"):
+        await message.answer("Пришлите файл <code>result.json</code> из экспорта Telegram Desktop "
+                             "или <code>catalog.json</code> из manage.py.")
+        return
+    if doc.file_size and doc.file_size > 20 * 1024 * 1024:
+        await message.answer("Файл больше 20 МБ — Telegram не даст боту его скачать. "
+                             "Запустите на компьютере <code>python manage.py catalog result.json</code> "
+                             "и пришлите получившийся маленький <code>catalog.json</code>.")
+        return
+    buf = io.BytesIO()
+    await bot.download(doc, destination=buf)
+    try:
+        catalog = load_any(json.loads(buf.getvalue().decode("utf-8")), cfg.block_words, exclude_words(db, cfg))
+    except (ValueError, UnicodeDecodeError) as e:
+        await message.answer(f"Не получилось прочитать файл: {html.escape(str(e))}")
+        return
+    if not catalog.categories:
+        await message.answer("В файле не нашёл постов с ценами.")
+        return
+    results = import_catalog(db, cfg, catalog)
+    await message.answer(format_bulk_report(results))
+
+
+def format_bulk_report(results) -> str:
+    lines = [f"✅ <b>Прайс обновлён</b>: {len(results)} категорий, "
+             f"{sum(r.diff.total for r in results)} позиций", ""]
+    for r in results:
+        mark = "🆕 " if r.created else ""
+        extra = []
+        if r.diff.changed:
+            extra.append(f"💱 {len(r.diff.changed)}")
+        if r.diff.previous and r.diff.added:
+            extra.append(f"➕ {len(r.diff.added)}")
+        if r.diff.removed:
+            extra.append(f"➖ {len(r.diff.removed)}")
+        if r.skipped:
+            extra.append(f"🚫 {r.skipped}")
+        lines.append(f"{mark}{r.cat_id}. {html.escape(r.title)} — {r.diff.total}" + (f" ({' '.join(extra)})" if extra else ""))
+    lines += ["", "💱 цена изменилась · ➕ новые · ➖ пропали · 🚫 пропущены (чехлы, зарядки…)",
+              "Наценки категорий — /cats, прайс в Excel — /excel"]
+    return "\n".join(lines)
+
+
+@router.message(Command("excel"))
+async def cmd_excel(message: Message, db: DB):
+    buf = io.BytesIO()
+    rows = build_xlsx(db, buf)
+    if not rows:
+        await message.answer("Прайс пуст.")
+        return
+    await message.answer_document(
+        BufferedInputFile(buf.getvalue(), filename=f"AVIOR_price_{date.today():%Y-%m-%d}.xlsx"),
+        caption=f"Прайс AVIOR: {rows} позиций",
+    )
