@@ -367,3 +367,16 @@ def test_section_names_for_phone_categories():
     cat = build_catalog(export, exclude_words=DEFAULT_EXCLUDE_WORDS).categories[0]
     assert [(s.title, [it.name for it in s.items]) for s in cat.sections] == [
         ("Смартфоны", ["🇦🇪 A07 4/64 Black", "Z Flip 8 12/256 Black"])]
+
+
+def test_merged_category_updates_target_not_old_source():
+    from app.telegram_export import Catalog, CatalogCategory
+    from app.parser import Section
+    db = DB(":memory:")
+    vacuums, dyson = db.add_category("Пылесосы"), db.add_category("Dyson")
+    db.set_source(vacuums, -100, 10)
+    db.set_source(dyson, -100, 11)
+    merged = Catalog(-100, [CatalogCategory("Dyson", [Section("V8", [Item("V8 Absolute", 30000)])], 0, 10)])
+    [result] = import_catalog(db, cfg_for_tests(), merged)
+    assert result.cat_id == dyson and not result.created
+    assert [i["name"] for i in db.items(dyson)] == ["V8 Absolute"] and db.items(vacuums) == []

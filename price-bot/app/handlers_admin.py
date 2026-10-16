@@ -9,7 +9,9 @@ from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command, CommandObject, Filter, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import BufferedInputFile, CallbackQuery, Message, MessageOriginChannel, TelegramObject
+from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, Message, MessageOriginChannel,
+                           TelegramObject)
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from . import keyboards as kb
 from .catalog_import import (catalog_filters, create_category, exclude_words, import_catalog, merge_categories,
@@ -416,7 +418,7 @@ async def on_document(message: Message, bot: Bot, db: DB, cfg: Config):
         return
     results = import_catalog(db, cfg, catalog)
     stale = [c for c in db.categories() if c["id"] not in {r.cat_id for r in results} and c["n_items"]]
-    await message.answer(format_bulk_report(results, stale))
+    await message.answer(format_bulk_report(results, stale), reply_markup=stale_keyboard(stale))
 
 
 def format_bulk_report(results, stale=()) -> str:
@@ -435,9 +437,9 @@ def format_bulk_report(results, stale=()) -> str:
             extra.append(f"🚫 {r.skipped}")
         lines.append(f"{mark}{r.cat_id}. {html.escape(r.title)} — {r.diff.total}" + (f" ({' '.join(extra)})" if extra else ""))
     if stale:
-        lines += ["", "⚠️ <b>Не обновлялись</b> — их нет в файле (или они теперь пропускаются/объединены):"]
-        lines += [f"{c['id']}. {html.escape(c['title'])} — {c['n_items']} поз. · удалить: /delcat {c['id']}"
-                  for c in stale]
+        lines += ["", "⚠️ <b>Не обновлялись</b> — их нет в файле (или они теперь пропускаются/объединены). "
+                      "Удалить — кнопками ниже:"]
+        lines += [f"{c['id']}. {html.escape(c['title'])} — {c['n_items']} поз." for c in stale]
     lines += ["", "💱 цена изменилась · ➕ новые · ➖ пропали · 🚫 пропущены (чехлы, зарядки…)",
               "Наценки категорий — /cats, прайс в Excel — /excel"]
     return "\n".join(lines)
@@ -514,3 +516,25 @@ async def cmd_onlycat(message: Message, command: CommandObject, db: DB, cfg: Con
     lines = [f"• {html.escape(k)}: только «{html.escape(v)}»" for k, v in sorted(mapping.items())] or ["—"]
     await message.answer("🎯 Из этих категорий поставщика берём только позиции со словом:\n" + "\n".join(lines)
                          + "\n\nПрименится при следующей загрузке прайса.")
+
+
+def stale_keyboard(stale):
+    if not stale:
+        return None
+    kb = InlineKeyboardBuilder()
+    for c in stale:
+        kb.button(text=f"🗑 Удалить «{c['title']}»", callback_data=f"delcat:{c['id']}")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+@router.callback_query(F.data.startswith("delcat:"))
+async def cb_delcat(call: CallbackQuery, db: DB):
+    cat = db.category(int(call.data.split(":")[1]))
+    if cat:
+        db.delete_category(cat["id"])
+    # убираем нажатую кнопку, остальные оставляем
+    rows = [row for row in (call.message.reply_markup.inline_keyboard if call.message.reply_markup else [])
+            if row[0].callback_data != call.data]
+    await call.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None)
+    await call.answer(f"Удалено: {cat['title']}" if cat else "Уже удалено")

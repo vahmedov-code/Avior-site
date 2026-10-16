@@ -84,10 +84,12 @@ def create_category(db: DB, cfg: Config, title: str) -> int:
 def import_catalog(db: DB, cfg: Config, catalog: Catalog) -> list[ImportResult]:
     results = []
     for c in catalog.categories:
-        cat = None
-        if catalog.source_chat_id and c.source_msg_id:
+        # Сначала по названию: при объединении («Пылесосы» → «Dyson») пост-источник
+        # совпадает со старой категорией «Пылесосы», а писать надо в «Dyson».
+        # По посту — запасной путь, если категорию переименовали через /rename.
+        cat = db.find_category_by_title(c.title)
+        if cat is None and catalog.source_chat_id and c.source_msg_id:
             cat = db.find_by_source(catalog.source_chat_id, c.source_msg_id)
-        cat = cat or db.find_category_by_title(c.title)
         created = cat is None
         cat_id = create_category(db, cfg, c.title) if created else cat["id"]
         if catalog.source_chat_id and c.source_msg_id:
