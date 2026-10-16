@@ -177,6 +177,8 @@ def render_cart(lines: list[CartLine]) -> str:
             total += line.qty * line.price
             qty = f"{line.qty} × " if line.qty > 1 else ""
             out.append(f"{no}. {html.escape(line.label)} — {qty}<b>{fmt_price(line.price)}</b>")
+            if line.path:
+                out.append(f"    <i>{html.escape(line.path)}</i>")
         else:
             out.append(f"{no}. <s>{html.escape(line.label)}</s> — ⚠️ закончился")
     out += ["", f"<b>Итого: {fmt_price(total)}</b>", "", "❌ с номером — убрать товар."]
@@ -289,6 +291,8 @@ def render_order_for_admin(db: DB, order) -> str:
     for no, it in enumerate(db.order_items(order), start=1):
         qty = f"{it['qty']} × " if it["qty"] > 1 else ""
         out.append(f"{no}. {html.escape(it['name'])} — {qty}{fmt_price(it['price'])} (закуп {fmt_price(it['cost'])})")
+        if it.get("path"):
+            out.append(f"    📂 {html.escape(it['path'])}")
     out += [
         "",
         f"<b>Итого: {fmt_price(order['total'])}</b>",

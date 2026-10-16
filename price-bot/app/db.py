@@ -65,9 +65,18 @@ class CartLine:
     cart_id: int
     label: str
     category: str
+    section: str
     qty: int
     price: int | None  # цена продажи сейчас; None — позиции больше нет в прайсе
     cost: int | None   # закупка
+
+    @property
+    def path(self) -> str:
+        """«Очки › Wayfarer» — откуда товар, чтобы по короткому названию было понятно, что это."""
+        parts = [self.category]
+        if self.section and self.section.lower() != self.category.lower():
+            parts.append(self.section)
+        return " › ".join(p for p in parts if p)
 
     @property
     def available(self) -> bool:
@@ -279,6 +288,7 @@ class DB:
                     cart_id=r["id"],
                     label=_item_label(r["section"], r["name"], r["note"]),
                     category=r["cat_title"] or "",
+                    section=r["section"],
                     qty=r["qty"],
                     price=price,
                     cost=cost,
@@ -298,7 +308,8 @@ class DB:
     def create_order(self, user_id: int, user_name: str, username: str | None, phone: str, delivery: str,
                      lines: list[CartLine]) -> int:
         items = [
-            {"name": l.label, "qty": l.qty, "price": l.price, "cost": l.cost} for l in lines if l.available
+            {"name": l.label, "qty": l.qty, "price": l.price, "cost": l.cost, "path": l.path}
+            for l in lines if l.available
         ]
         total = sum(i["qty"] * i["price"] for i in items)
         cost = sum(i["qty"] * i["cost"] for i in items)

@@ -119,7 +119,8 @@ def test_cart_survives_price_update_and_order():
     order = db.order(order_id)
     assert order["total"] == 264000 and order["cost"] == 240000
     assert db.order_items(order) == [
-        {"name": "18 Pro 256Gb Black 🇰🇷🇭🇰(1 sim+e sim)", "qty": 2, "price": 132000, "cost": 120000}
+        {"name": "18 Pro 256Gb Black 🇰🇷🇭🇰(1 sim+e sim)", "qty": 2, "price": 132000, "cost": 120000,
+         "path": "iPhone 18 Pro › iPhone 18 Pro 256/512/1TB/2TB"}
     ]
     assert db.cart_count(7) == 0
 
