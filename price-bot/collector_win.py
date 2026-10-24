@@ -50,7 +50,8 @@ def remote(s: dict, args: str) -> str:
     done = subprocess.run(["ssh", *ssh_base(s), s["SSH_HOST"], cmd],
                           capture_output=True, text=True, encoding="utf-8", timeout=300)
     if done.returncode != 0:
-        raise RuntimeError(f"сервер бота ответил ошибкой: {(done.stderr or done.stdout).strip()[:500]}")
+        # причина ошибки — в конце вывода Python, показываем хвост
+        raise RuntimeError(f"сервер бота ответил ошибкой: …{(done.stderr or done.stdout).strip()[-1500:]}")
     return done.stdout
 
 
