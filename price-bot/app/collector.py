@@ -26,7 +26,7 @@ EXTRACT_JS = r"""() => {
     const textEl = el.querySelector('.text-content') || el.querySelector('.message-content');
     const buttons = [...el.querySelectorAll('.InlineButtons button')].map(b => b.innerText.trim()).filter(Boolean);
     return {id: Number(raw), text: textEl ? textEl.innerText : '', buttons};
-  }).filter(p => p.id > 0);
+  }).filter(p => Number.isInteger(p.id) && p.id > 0);  // «0.01» — служебные элементы, не посты
 }"""
 SCROLL_UP_JS = """() => {
   const list = document.querySelector('.MessageList');

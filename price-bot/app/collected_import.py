@@ -57,7 +57,8 @@ def handle(db: DB, cfg: Config, data: dict, report_always: bool = False) -> tupl
     info = supplier(db)
     if not info:
         return "Сборщик: сначала один раз отправьте боту экспорт канала (result.json).", None
-    posts = {int(i): t for i, t in data["posts"].items()}
+    # Номера постов — целые; «0.01» и т.п. — служебные элементы страницы Telegram Web
+    posts = {int(i): t for i, t in data["posts"].items() if str(i).isdigit()}
     catalog = load_any(export_from_posts(info, posts), **catalog_filters(db, cfg))
     if not catalog.categories:
         return "⚠️ Сборщик прочитал канал, но не нашёл цен. Цены не изменены.", None

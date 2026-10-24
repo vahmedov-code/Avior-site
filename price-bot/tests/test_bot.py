@@ -415,7 +415,8 @@ def test_collected_import_from_windows_collector():
     assert supplier(db)["all_buttons"] == ["iPhone 18 Pro", "VK"] and chat_id_of(supplier(db)) == -10042
 
     collected = {"format": "avior-collected-1", "ok": True,
-                 "posts": {"10": "iPhone 18 Pro\n18 Pro 256 Black-115.500"}, "menu_buttons": ["iPhone 18 Pro", "VK"]}
+                 "posts": {"10": "iPhone 18 Pro\n18 Pro 256 Black-115.500", "0.01": "October 24"},
+                 "menu_buttons": ["iPhone 18 Pro", "VK"]}
     text, _ = handle(db, cfg, collected)
     assert text.startswith("🤖") and "изменений: 1" in text  # первый раз — новая позиция
 
