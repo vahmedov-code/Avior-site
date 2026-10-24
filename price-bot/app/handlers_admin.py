@@ -15,7 +15,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from . import keyboards as kb
 from .catalog_import import (catalog_filters, create_category, exclude_words, import_catalog, merge_categories,
-                             only_words, set_exclude_words, set_merge_categories, set_only_words,
+                             only_words, remember_supplier, set_exclude_words, set_merge_categories, set_only_words,
                              set_skip_categories, skip_categories)
 from .config import Config
 from .db import DB, ImportDiff
@@ -413,13 +413,15 @@ async def on_document(message: Message, bot: Bot, db: DB, cfg: Config):
     buf = io.BytesIO()
     await bot.download(doc, destination=buf)
     try:
-        catalog = load_any(json.loads(buf.getvalue().decode("utf-8")), **catalog_filters(db, cfg))
+        data = json.loads(buf.getvalue().decode("utf-8"))
+        catalog = load_any(data, **catalog_filters(db, cfg))
     except (ValueError, UnicodeDecodeError) as e:
         await message.answer(f"Не получилось прочитать файл: {html.escape(str(e))}")
         return
     if not catalog.categories:
         await message.answer("В файле не нашёл постов с ценами.")
         return
+    remember_supplier(db, data)
     results = import_catalog(db, cfg, catalog)
     stale = [c for c in db.categories() if c["id"] not in {r.cat_id for r in results} and c["n_items"]]
     await message.answer(format_bulk_report(results, stale), reply_markup=stale_keyboard(stale))

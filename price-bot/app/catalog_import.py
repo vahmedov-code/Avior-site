@@ -1,12 +1,13 @@
 """Общая логика импорта для бота и для manage.py."""
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
 from .config import Config
 from .db import DB, ImportDiff
 from .rules import is_accessory
-from .telegram_export import Catalog
+from .telegram_export import Catalog, supplier_info
 
 
 @dataclass
@@ -71,6 +72,18 @@ def set_merge_categories(db: DB, mapping: dict[str, str]) -> None:
 
 def set_exclude_words(db: DB, words) -> None:
     db.set_setting("exclude_words", "|".join(sorted({w.strip().lower() for w in words if w.strip()})))
+
+
+def remember_supplier(db: DB, export: dict) -> None:
+    """Запоминаем канал и его меню из экспорта: по ним работает браузерный сборщик."""
+    info = supplier_info(export) if "messages" in export else None
+    if info:
+        db.set_setting("supplier", json.dumps(info, ensure_ascii=False))
+
+
+def supplier(db: DB) -> dict | None:
+    raw = db.get_setting("supplier")
+    return json.loads(raw) if raw else None
 
 
 def create_category(db: DB, cfg: Config, title: str) -> int:

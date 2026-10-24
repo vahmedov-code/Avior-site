@@ -80,14 +80,45 @@ def _buttons(msg: dict) -> list[tuple[str, int]]:
     return found
 
 
-def find_menu(messages: list[dict]) -> list[tuple[str, int]]:
-    """Кнопки самого «кнопочного» поста — это и есть меню категорий."""
-    best: list[tuple[str, int]] = []
+def find_menu_message(messages: list[dict]) -> tuple[int | None, list[tuple[str, int]]]:
+    """Самый «кнопочный» пост — это меню категорий: (его id, [(кнопка, id поста)])."""
+    best_id, best = None, []
     for msg in messages:
         buttons = _buttons(msg)
         if len(buttons) > len(best):
-            best = buttons
-    return best
+            best_id, best = msg.get("id"), buttons
+    return best_id, best
+
+
+def find_menu(messages: list[dict]) -> list[tuple[str, int]]:
+    return find_menu_message(messages)[1]
+
+
+def supplier_info(export: dict) -> dict | None:
+    """Что запомнить о канале поставщика, чтобы потом читать его без экспорта (сборщиком)."""
+    messages = export.get("messages", [])
+    menu_id, menu = find_menu_message(messages)
+    if not menu or not isinstance(export.get("id"), int):
+        return None
+    menu_msg = next(m for m in messages if m.get("id") == menu_id)
+    all_buttons = [str(b.get("text", "")) for row in menu_msg.get("inline_bot_buttons") or [] for b in row]
+    return {"id": export["id"], "type": export.get("type", ""), "name": export.get("name", ""),
+            "menu_msg_id": menu_id, "menu": [[title, msg_id] for title, msg_id in menu],
+            "all_buttons": all_buttons}
+
+
+def export_from_posts(supplier: dict, posts: dict[int, str]) -> dict:
+    """Собирает «экспорт» из текстов постов, прочитанных сборщиком, и запомненного меню —
+    дальше он разбирается так же, как настоящий result.json."""
+    messages = [{"id": i, "type": "message", "text": t} for i, t in posts.items() if i != supplier["menu_msg_id"]]
+    raw = str(supplier["id"])
+    messages.append({
+        "id": supplier["menu_msg_id"], "type": "message", "text": "",
+        "inline_bot_buttons": [[{"type": "url", "text": title, "data": f"https://t.me/c/{raw}/{msg_id}"}]
+                               for title, msg_id in supplier["menu"]],
+    })
+    return {"name": supplier.get("name", ""), "type": supplier.get("type", ""), "id": supplier["id"],
+            "messages": messages}
 
 
 def bot_api_chat_id(export: dict) -> int | None:

@@ -4,6 +4,8 @@
   python manage.py import result.json        обновить цены в боте (база data/shop.db)
   python manage.py excel                     Excel из текущей базы бота
   python manage.py catalog result.json       сжать большой экспорт в catalog.json (его можно отправить боту)
+  python manage.py login                     вход браузерного сборщика по QR-коду (код придёт в бота)
+  python manage.py collect                   сборщик: прочитать канал поставщика и обновить цены
 
 result.json — экспорт группы поставщика из Telegram Desktop
 (⋮ в группе → Экспорт истории чата → формат JSON, без фото и файлов).
@@ -14,7 +16,7 @@ import os
 import sys
 from datetime import date
 
-from app.catalog_import import catalog_filters, import_catalog
+from app.catalog_import import catalog_filters, import_catalog, remember_supplier
 from app.config import Config
 from app.db import DB
 from app.excel import build_xlsx
@@ -52,7 +54,10 @@ def print_results(results) -> None:
 
 def cmd_import(args, cfg: Config) -> None:
     db = bot_db(cfg)
-    results = import_catalog(db, cfg, load_catalog(args.file, db, cfg))
+    catalog = load_catalog(args.file, db, cfg)
+    with open(args.file, encoding="utf-8") as f:
+        remember_supplier(db, json.load(f))
+    results = import_catalog(db, cfg, catalog)
     print(f"Обновлена база бота {cfg.db_path}:")
     print_results(results)
 
@@ -95,6 +100,12 @@ def cmd_catalog(args, cfg: Config) -> None:
     print(f"Готово: {out} — {len(catalog.categories)} категорий, {n} позиций. Отправьте этот файл боту.")
 
 
+def cmd_collector(args, cfg: Config) -> None:
+    from app import collector
+
+    sys.exit(collector.main(args.command, Config.from_env(), bot_db(cfg), getattr(args, "report", False)))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -109,6 +120,11 @@ def main() -> None:
     p.add_argument("file")
     p.add_argument("-o", "--output")
     p.set_defaults(func=cmd_catalog)
+    p = sub.add_parser("login", help="вход браузерного сборщика в Telegram по QR-коду (код придёт в бота)")
+    p.set_defaults(func=cmd_collector)
+    p = sub.add_parser("collect", help="прочитать канал поставщика через браузер и обновить цены")
+    p.add_argument("--report", action="store_true", help="прислать отчёт, даже если ничего не изменилось")
+    p.set_defaults(func=cmd_collector)
     args = parser.parse_args()
     args.func(args, Config.from_env(for_bot=False))
 

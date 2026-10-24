@@ -65,7 +65,8 @@ class Config:
             bot_token=token,
             admin_ids=admins,
             shop_name=os.getenv("SHOP_NAME", "AVIOR Shop"),
-            welcome_text=_text("WELCOME_TEXT", "Оригинальная техника Apple и не только. Актуальные цены, гарантия. Доставка курьером по Москве, СДЭК и Ozon."),
+            welcome_text=_text("WELCOME_TEXT", "Оригинальная техника Apple и не только.\nАктуальные цены, гарантия. Доставка курьером по Москве, СДЭК и Ozon.\n\n"
+                                 "🕚 Цены обновляются каждый день с 11:00 до 12:00 (МСК)."),
             contacts_text=_text("CONTACTS_TEXT", DEFAULT_CONTACTS),
             db_path=os.getenv("DB_PATH", "data/shop.db"),
             default_markup_pct=float(os.getenv("MARKUP_PCT", "0")),
