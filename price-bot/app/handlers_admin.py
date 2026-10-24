@@ -447,7 +447,7 @@ def format_bulk_report(results, stale=()) -> str:
                       "Удалить — кнопками ниже:"]
         lines += [f"{c['id']}. {html.escape(c['title'])} — {c['n_items']} поз." for c in stale]
     lines += ["", "💱 цена изменилась · ➕ новые · ➖ пропали · 🚫 пропущены (чехлы, зарядки…)",
-              "Наценки категорий — /cats, прайс в Excel — /excel"]
+              "Наценки категорий — /cats, прайс в Excel — /excel, статистика посещений — /stats"]
     return "\n".join(lines)
 
 
