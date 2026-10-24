@@ -94,15 +94,34 @@ def create_category(db: DB, cfg: Config, title: str) -> int:
     return cat_id
 
 
+def _existing_category(db: DB, catalog: Catalog, c):
+    # Сначала по названию: при объединении («Пылесосы» → «Dyson») пост-источник
+    # совпадает со старой категорией «Пылесосы», а писать надо в «Dyson».
+    # По посту — запасной путь, если категорию переименовали через /rename.
+    cat = db.find_category_by_title(c.title)
+    if cat is None and catalog.source_chat_id and c.source_msg_id:
+        cat = db.find_by_source(catalog.source_chat_id, c.source_msg_id)
+    return cat
+
+
+def preview_removals(db: DB, catalog: Catalog) -> tuple[int, list[str], list[str]]:
+    """Без записи в базу: сколько позиций сейчас в затронутых категориях и какие из них
+    пропадут / появятся, если применить каталог."""
+    previous, removed, added = 0, [], []
+    for c in catalog.categories:
+        cat = _existing_category(db, catalog, c)
+        old = {(r["section"], r["name"], r["note"]) for r in db.items(cat["id"])} if cat else set()
+        new = {(s.title, it.name, it.note) for s in c.sections for it in s.items}
+        previous += len(old)
+        removed += [" ".join(p for p in k[1:] if p) for k in old - new]
+        added += [" ".join(p for p in k[1:] if p) for k in new - old]
+    return previous, removed, added
+
+
 def import_catalog(db: DB, cfg: Config, catalog: Catalog) -> list[ImportResult]:
     results = []
     for c in catalog.categories:
-        # Сначала по названию: при объединении («Пылесосы» → «Dyson») пост-источник
-        # совпадает со старой категорией «Пылесосы», а писать надо в «Dyson».
-        # По посту — запасной путь, если категорию переименовали через /rename.
-        cat = db.find_category_by_title(c.title)
-        if cat is None and catalog.source_chat_id and c.source_msg_id:
-            cat = db.find_by_source(catalog.source_chat_id, c.source_msg_id)
+        cat = _existing_category(db, catalog, c)
         created = cat is None
         cat_id = create_category(db, cfg, c.title) if created else cat["id"]
         if catalog.source_chat_id and c.source_msg_id:

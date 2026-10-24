@@ -5,13 +5,16 @@ from __future__ import annotations
 import base64
 import html
 
-from .catalog_import import catalog_filters, import_catalog, supplier
+from .catalog_import import catalog_filters, import_catalog, preview_removals, supplier
 from .config import Config
 from .db import DB
 from .pricing import apply_markup, fmt_price
 from .telegram_export import TITLE_JUNK_RE, export_from_posts, load_any
 
 RESULT_FORMAT = "avior-collected-1"
+# Если сборщик выкидывает/переименовывает больше этой доли позиций — не применяем:
+# скорее всего, веб-версия Telegram отдала текст не так, как обычно
+MAX_REMOVED_SHARE = 0.3
 
 
 def _norm(title: str) -> str:
@@ -62,6 +65,13 @@ def handle(db: DB, cfg: Config, data: dict, report_always: bool = False) -> tupl
     catalog = load_any(export_from_posts(info, posts), **catalog_filters(db, cfg))
     if not catalog.categories:
         return "⚠️ Сборщик прочитал канал, но не нашёл цен. Цены не изменены.", None
+    previous, removed, added = preview_removals(db, catalog)
+    if previous and len(removed) > MAX_REMOVED_SHARE * previous:
+        sample_old = "\n".join("• " + html.escape(x[:70]) for x in sorted(removed)[:3])
+        sample_new = "\n".join("• " + html.escape(x[:70]) for x in sorted(added)[:3])
+        return (f"⚠️ Сборщик прочитал канал, но {len(removed)} из {previous} позиций выглядят иначе, чем сейчас. "
+                "Похоже на сбой чтения — <b>цены не изменены</b>.\n\nБыло, например:\n"
+                f"{sample_old}\nСтало:\n{sample_new}"), None
     results = import_catalog(db, cfg, catalog)
 
     # Новые кнопки в меню поставщика: сравниваем со всеми кнопками, включая служебные (VK, Trade-In…).
