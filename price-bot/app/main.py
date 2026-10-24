@@ -4,6 +4,7 @@ import logging
 from aiogram import Bot, Dispatcher
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeChat
 
@@ -36,6 +37,23 @@ ADMIN_COMMANDS = [
 ]
 
 
+async def set_menus(bot: Bot, cfg: Config, attempts: int = 10) -> None:
+    """Клиентам в меню — только /start, владельцу — все команды управления."""
+    for attempt in range(attempts):
+        try:
+            await bot.set_my_commands([BotCommand(command="start", description="Каталог и цены")])
+            for admin_id in cfg.admin_ids:
+                try:
+                    await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id))
+                except TelegramBadRequest:
+                    # владелец ещё ни разу не писал боту — меню появится после следующего перезапуска
+                    logging.warning("Не удалось поставить меню команд для %s", admin_id)
+            return
+        except Exception as e:  # сеть или временный сбой Telegram
+            logging.warning("Меню команд не поставлено (%s), попытка %s из %s", e, attempt + 1, attempts)
+            await asyncio.sleep(60)
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = Config.from_env()
@@ -55,15 +73,10 @@ async def main() -> None:
     dp.message.outer_middleware(VisitMiddleware())
     dp.callback_query.outer_middleware(VisitMiddleware())
 
-    # Клиентам в меню — только /start, владельцу — все команды управления
-    await bot.set_my_commands([BotCommand(command="start", description="Каталог и цены")])
-    for admin_id in cfg.admin_ids:
-        try:
-            await bot.set_my_commands(ADMIN_COMMANDS, scope=BotCommandScopeChat(chat_id=admin_id))
-        except Exception:
-            # владелец ещё ни разу не писал боту — меню появится после следующего перезапуска
-            logging.warning("Не удалось поставить меню команд для %s", admin_id)
+    # Меню команд ставим в фоне: временный сбой Telegram («Bad Gateway») не должен ронять бота
+    menus = asyncio.create_task(set_menus(bot, cfg))  # ссылку держим, чтобы задачу не собрал сборщик мусора
     await dp.start_polling(bot)
+    menus.cancel()
 
 
 if __name__ == "__main__":
