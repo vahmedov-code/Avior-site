@@ -21,6 +21,12 @@ RESULT_FORMAT = "avior-collected-1"
 # Текст каждого поста. Время/просмотры (MessageMeta) прячем, чтобы не попали в текст.
 EXTRACT_JS = r"""() => {
   document.querySelectorAll('.MessageMeta, .message-meta').forEach(m => m.style.display = 'none');
+  // Эмодзи и флаги (🇺🇸, 🔥) веб-версия рисует картинками — подставляем их текст из alt/data-alt,
+  // иначе «Black-110.500🇺🇸e sim» превращается в «Black-110.500e sim» и не совпадает с экспортом
+  document.querySelectorAll('.text-content img[alt], .text-content [data-alt]').forEach(el => {
+    const alt = el.getAttribute('alt') || el.getAttribute('data-alt');
+    if (alt && !el.querySelector('img[alt], [data-alt]')) el.replaceWith(document.createTextNode(alt));
+  });
   return [...document.querySelectorAll("[data-message-id], .Message[id^='message']")].map(el => {
     const raw = el.getAttribute('data-message-id') || (el.id.match(/\d+/) || [''])[0];
     const textEl = el.querySelector('.text-content') || el.querySelector('.message-content');
