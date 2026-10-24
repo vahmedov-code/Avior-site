@@ -396,3 +396,36 @@ def test_visit_stats():
     assert db.visitor_stats("2026-10-18") == (2, 2, 4)
     assert db.top_categories("2026-10-18") == [("iPhone 18 Pro", 2)]
     assert db.order_stats(0) == (0, 0, 0)
+
+
+def test_collected_import_from_windows_collector():
+    from app.catalog_import import remember_supplier, supplier
+    from app.collected_import import handle
+    from app.collector import chat_id_of, failure
+
+    export = {"name": "S", "type": "private_channel", "id": 42, "messages": [
+        {"id": 10, "type": "message", "text": "iPhone 18 Pro\n18 Pro 256 Black-115.500"},
+        {"id": 20, "type": "message", "text": "Меню", "inline_bot_buttons": [
+            [{"type": "url", "text": "iPhone 18 Pro", "data": "https://t.me/S/10"}],
+            [{"type": "url", "text": "VK", "data": "https://vk.com/s"}]]},
+    ]}
+    db, cfg = DB(":memory:"), cfg_for_tests()
+    db.init_defaults({"markup_pct": 0, "markup_fixed": 10000, "round_step": 100})
+    remember_supplier(db, export)
+    assert supplier(db)["all_buttons"] == ["iPhone 18 Pro", "VK"] and chat_id_of(supplier(db)) == -10042
+
+    collected = {"format": "avior-collected-1", "ok": True,
+                 "posts": {"10": "iPhone 18 Pro\n18 Pro 256 Black-115.500"}, "menu_buttons": ["iPhone 18 Pro", "VK"]}
+    text, _ = handle(db, cfg, collected)
+    assert text.startswith("🤖") and "изменений: 1" in text  # первый раз — новая позиция
+
+    assert handle(db, cfg, collected) == (None, None)  # ничего не изменилось — молчим
+
+    collected["posts"]["10"] = "iPhone 18 Pro\n18 Pro 256 Black-112.000"
+    collected["menu_buttons"].append("iPhone 19")
+    text, _ = handle(db, cfg, collected)
+    assert "115 500 ₽ → 112 000 ₽ (у вас 122 000 ₽)" in text and "новые кнопки: iPhone 19" in text
+
+    text, photo = handle(db, cfg, failure("прочитано 7 из 33 постов меню", b"png"))
+    assert "Цены не изменены" in text and photo == b"png"
+    assert db.items(db.find_category_by_title("iPhone 18 Pro")["id"])[0]["base_price"] == 112000  # ошибка цены не трогает

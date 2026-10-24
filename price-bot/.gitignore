@@ -3,3 +3,7 @@ data/
 __pycache__/
 .pytest_cache/
 .venv/
+collector.env
+collected.json
+collector.log
+browser/

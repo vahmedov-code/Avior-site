@@ -4,8 +4,7 @@
   python manage.py import result.json        обновить цены в боте (база data/shop.db)
   python manage.py excel                     Excel из текущей базы бота
   python manage.py catalog result.json       сжать большой экспорт в catalog.json (его можно отправить боту)
-  python manage.py login                     вход браузерного сборщика по QR-коду (код придёт в бота)
-  python manage.py collect                   сборщик: прочитать канал поставщика и обновить цены
+  python manage.py import-collected F.json   принять результат сборщика с Windows-сервера (его вызывает сам сборщик)
 
 result.json — экспорт группы поставщика из Telegram Desktop
 (⋮ в группе → Экспорт истории чата → формат JSON, без фото и файлов).
@@ -16,7 +15,7 @@ import os
 import sys
 from datetime import date
 
-from app.catalog_import import catalog_filters, import_catalog, remember_supplier
+from app.catalog_import import catalog_filters, import_catalog, remember_supplier, supplier
 from app.config import Config
 from app.db import DB
 from app.excel import build_xlsx
@@ -100,10 +99,44 @@ def cmd_catalog(args, cfg: Config) -> None:
     print(f"Готово: {out} — {len(catalog.categories)} категорий, {n} позиций. Отправьте этот файл боту.")
 
 
-def cmd_collector(args, cfg: Config) -> None:
-    from app import collector
+def cmd_supplier(args, cfg: Config) -> None:
+    """Для сборщика на Windows: какой канал читать и какие посты в меню."""
+    info = supplier(bot_db(cfg))
+    if not info:
+        sys.exit("Канал поставщика неизвестен: один раз отправьте боту экспорт канала (result.json).")
+    print(json.dumps(info, ensure_ascii=False))
 
-    sys.exit(collector.main(args.command, Config.from_env(), bot_db(cfg), getattr(args, "report", False)))
+
+def cmd_import_collected(args, cfg: Config) -> None:
+    """Принимает результат сборщика с Windows-сервера и сообщает владельцу об изменениях."""
+    import asyncio
+
+    from aiogram import Bot
+    from aiogram.client.default import DefaultBotProperties
+    from aiogram.enums import ParseMode
+    from aiogram.types import BufferedInputFile
+
+    from app.collected_import import handle
+
+    bot_cfg = Config.from_env()
+    with open(args.file, encoding="utf-8") as f:
+        text, photo = handle(bot_db(bot_cfg), bot_cfg, json.load(f), args.report)
+    print(text or "Изменений нет.")
+    if not text:
+        return
+
+    async def send():
+        bot = Bot(bot_cfg.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+        try:
+            for admin_id in bot_cfg.admin_ids:
+                if photo:
+                    await bot.send_photo(admin_id, BufferedInputFile(photo, "screen.png"), caption=text[:1000])
+                else:
+                    await bot.send_message(admin_id, text)
+        finally:
+            await bot.session.close()
+
+    asyncio.run(send())
 
 
 def main() -> None:
@@ -120,11 +153,12 @@ def main() -> None:
     p.add_argument("file")
     p.add_argument("-o", "--output")
     p.set_defaults(func=cmd_catalog)
-    p = sub.add_parser("login", help="вход браузерного сборщика в Telegram по QR-коду (код придёт в бота)")
-    p.set_defaults(func=cmd_collector)
-    p = sub.add_parser("collect", help="прочитать канал поставщика через браузер и обновить цены")
+    p = sub.add_parser("supplier", help="для сборщика: канал поставщика и его меню (JSON)")
+    p.set_defaults(func=cmd_supplier)
+    p = sub.add_parser("import-collected", help="принять результат сборщика с Windows-сервера")
+    p.add_argument("file")
     p.add_argument("--report", action="store_true", help="прислать отчёт, даже если ничего не изменилось")
-    p.set_defaults(func=cmd_collector)
+    p.set_defaults(func=cmd_import_collected)
     args = parser.parse_args()
     args.func(args, Config.from_env(for_bot=False))
 

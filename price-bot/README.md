@@ -43,6 +43,27 @@
 
 Скрипт находит пост-меню с кнопками категорий, проходит по ссылкам и берёт актуальный текст каждого поста.
 
+## Сборщик цен на Windows-сервере (автоматическое обновление)
+
+Невидимый браузер Chromium на Windows-сервере читает канал поставщика через web.telegram.org
+от имени обычного аккаунта (api_id не нужен) и по SSH отправляет прочитанное на Linux-сервер
+бота (`manage.py import-collected`). Бот обновляет цены и присылает владельцу отчёт об
+изменениях; если канал прочитан не полностью — цены не трогаются, приходит скриншот.
+Токен бота на Windows не нужен. Меню поставщика бот запоминает, когда ему отправляют экспорт
+канала (`result.json`) — это нужно сделать один раз и повторять, если у поставщика появились
+новые кнопки (сборщик об этом предупредит).
+
+```powershell
+git clone -b claude/clever-turing-0k1k99 https://github.com/vahmedov-code/avior-site.git C:\avior
+cd C:\avior\price-bot
+py -m venv .venv
+.venv\Scripts\pip install -r requirements-collector.txt
+.venv\Scripts\python -m playwright install chromium
+copy collector.env.example collector.env
+.venv\Scripts\python collector_win.py login     # окно браузера: войти по QR-коду (один раз)
+.venv\Scripts\python collector_win.py run --report
+```
+
 ## Запуск
 
 1. Создайте бота у [@BotFather](https://t.me/BotFather) (`/newbot`) со своего основного аккаунта,
