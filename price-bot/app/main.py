@@ -10,6 +10,7 @@ from aiogram.types import BotCommand
 from . import handlers_admin, handlers_user
 from .config import Config
 from .db import DB
+from .stats import VisitMiddleware
 
 
 async def main() -> None:
@@ -28,6 +29,8 @@ async def main() -> None:
     dp = Dispatcher(storage=MemoryStorage(), db=db, cfg=cfg)
     # Админский роутер первым: пересланный владельцем прайс должен уйти в импорт.
     dp.include_routers(handlers_admin.router, handlers_user.router)
+    dp.message.outer_middleware(VisitMiddleware())
+    dp.callback_query.outer_middleware(VisitMiddleware())
 
     await bot.set_my_commands([BotCommand(command="start", description="Каталог и цены")])
     await dp.start_polling(bot)

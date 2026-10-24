@@ -44,6 +44,26 @@ CREATE TABLE IF NOT EXISTS cart (
     qty         INTEGER NOT NULL DEFAULT 1,
     UNIQUE (user_id, category_id, section, name, note)
 );
+-- Статистика посещений: кто заходил и в какие дни (день — по Москве, «2026-10-24»)
+CREATE TABLE IF NOT EXISTS visitors (
+    user_id    INTEGER PRIMARY KEY,
+    username   TEXT,
+    full_name  TEXT NOT NULL DEFAULT '',
+    first_day  TEXT NOT NULL,
+    last_seen  INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS visits (
+    user_id INTEGER NOT NULL,
+    day     TEXT NOT NULL,
+    actions INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (user_id, day)
+);
+CREATE TABLE IF NOT EXISTS category_views (
+    category_id INTEGER NOT NULL,
+    day         TEXT NOT NULL,
+    views       INTEGER NOT NULL DEFAULT 1,
+    PRIMARY KEY (category_id, day)
+);
 CREATE TABLE IF NOT EXISTS orders (
     id         INTEGER PRIMARY KEY,
     user_id    INTEGER NOT NULL,
@@ -341,3 +361,56 @@ class DB:
             if c["title"].strip().lower() == title.strip().lower():
                 return c
         return None
+
+    # --- статистика ---
+    def track_visit(self, user_id: int, username: str | None, full_name: str, day: str) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO visitors(user_id, username, full_name, first_day, last_seen) VALUES(?, ?, ?, ?, ?) "
+                "ON CONFLICT(user_id) DO UPDATE SET username = excluded.username, full_name = excluded.full_name, "
+                "last_seen = excluded.last_seen",
+                (user_id, username, full_name, day, int(time.time())),
+            )
+            self.conn.execute(
+                "INSERT INTO visits(user_id, day) VALUES(?, ?) "
+                "ON CONFLICT(user_id, day) DO UPDATE SET actions = actions + 1",
+                (user_id, day),
+            )
+
+    def track_category_view(self, cat_id: int, day: str) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO category_views(category_id, day) VALUES(?, ?) "
+                "ON CONFLICT(category_id, day) DO UPDATE SET views = views + 1",
+                (cat_id, day),
+            )
+
+    def visitor_stats(self, since_day: str) -> tuple[int, int, int]:
+        """(новых, активных, действий) с указанного дня включительно."""
+        new = self.conn.execute("SELECT COUNT(*) FROM visitors WHERE first_day >= ?", (since_day,)).fetchone()[0]
+        active, actions = self.conn.execute(
+            "SELECT COUNT(DISTINCT user_id), COALESCE(SUM(actions), 0) FROM visits WHERE day >= ?", (since_day,)
+        ).fetchone()
+        return new, active, actions
+
+    def total_visitors(self) -> int:
+        return self.conn.execute("SELECT COUNT(*) FROM visitors").fetchone()[0]
+
+    def order_stats(self, since_ts: int) -> tuple[int, int, int]:
+        """(заказов, подтверждено, сумма подтверждённых) с момента since_ts."""
+        return tuple(self.conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(status = 'ok'), 0), COALESCE(SUM(CASE WHEN status = 'ok' THEN total END), 0) "
+            "FROM orders WHERE created_at >= ?",
+            (since_ts,),
+        ).fetchone())
+
+    def top_categories(self, since_day: str, limit: int = 5) -> list[tuple[str, int]]:
+        rows = self.conn.execute(
+            "SELECT c.title, SUM(v.views) AS n FROM category_views v JOIN categories c ON c.id = v.category_id "
+            "WHERE v.day >= ? GROUP BY v.category_id ORDER BY n DESC LIMIT ?",
+            (since_day, limit),
+        ).fetchall()
+        return [(r["title"], r["n"]) for r in rows]
+
+    def recent_visitors(self, limit: int = 10) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM visitors ORDER BY last_seen DESC LIMIT ?", (limit,)).fetchall()

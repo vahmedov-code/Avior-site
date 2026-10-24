@@ -14,6 +14,7 @@ from . import keyboards as kb
 from .config import Config
 from .db import DB, CartLine
 from .pricing import fmt_price
+from .stats import is_customer, today
 
 router = Router(name="user")
 
@@ -125,6 +126,8 @@ async def cb_category(call: CallbackQuery, db: DB, cfg: Config):
     if not sections:
         await call.answer("Цены скоро появятся", show_alert=True)
         return
+    if is_customer(call.from_user.id, cfg):
+        db.track_category_view(cat["id"], today(cfg).date().isoformat())
     if len(sections) == 1:
         await safe_edit(call, *render_section(db, cfg, call.from_user.id, cat, 0, 0))
     else:

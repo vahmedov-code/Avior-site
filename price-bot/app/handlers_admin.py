@@ -24,6 +24,7 @@ from .excel import build_xlsx
 from .parser import count_items, parse_post
 from .pricing import apply_markup, fmt_price
 from .rules import filter_sections
+from .stats import format_stats
 from .telegram_export import load_any
 
 router = Router(name="admin")
@@ -54,6 +55,9 @@ HELP = """<b>Управление ботом</b>
 /catmarkup 3 15 — своя наценка для категории №3 (+15%)
 /catmarkup 3 15 1000 — +15% и +1000 ₽
 /catmarkup 3 off — категория №3 снова по общей наценке
+
+<b>Статистика</b>
+/stats — сколько людей заходило, заказы, популярные категории
 
 <b>Заказы</b>
 Новые заказы приходят сюда с кнопками ✅ Подтвердить / ❌ Отменить — клиент получит уведомление.
@@ -538,3 +542,8 @@ async def cb_delcat(call: CallbackQuery, db: DB):
             if row[0].callback_data != call.data]
     await call.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None)
     await call.answer(f"Удалено: {cat['title']}" if cat else "Уже удалено")
+
+
+@router.message(Command("stats"))
+async def cmd_stats(message: Message, db: DB, cfg: Config):
+    await message.answer(format_stats(db, cfg))

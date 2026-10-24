@@ -380,3 +380,19 @@ def test_merged_category_updates_target_not_old_source():
     [result] = import_catalog(db, cfg_for_tests(), merged)
     assert result.cat_id == dyson and not result.created
     assert [i["name"] for i in db.items(dyson)] == ["V8 Absolute"] and db.items(vacuums) == []
+
+
+def test_visit_stats():
+    db = DB(":memory:")
+    cat = db.add_category("iPhone 18 Pro")
+    db.track_visit(1, "ann", "Ann", "2026-10-20")
+    db.track_visit(1, "ann", "Ann", "2026-10-24")
+    db.track_visit(1, "ann", "Ann", "2026-10-24")
+    db.track_visit(2, None, "Bob", "2026-10-24")
+    db.track_category_view(cat, "2026-10-24")
+    db.track_category_view(cat, "2026-10-24")
+    assert db.total_visitors() == 2
+    assert db.visitor_stats("2026-10-24") == (1, 2, 3)  # новый только Bob, активны оба, 3 действия
+    assert db.visitor_stats("2026-10-18") == (2, 2, 4)
+    assert db.top_categories("2026-10-18") == [("iPhone 18 Pro", 2)]
+    assert db.order_stats(0) == (0, 0, 0)
