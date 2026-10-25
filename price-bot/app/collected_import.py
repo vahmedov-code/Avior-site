@@ -32,17 +32,19 @@ def format_changes(db: DB, results, limit: int = 25) -> str:
         if not (d.changed or d.added or d.removed):
             continue
         pct, fixed, step = db.markup(db.category(r.cat_id))
-        lines += ["", f"<b>{html.escape(r.title)}</b>"]
+        block = []
         for name, old, new in d.changed:
             if shown < limit:
                 arrow = "🔺" if new > old else "🔻"
-                lines.append(f"{arrow} {html.escape(name)}: {fmt_price(old)} → {fmt_price(new)} "
+                block.append(f"{arrow} {html.escape(name)}: {fmt_price(old)} → {fmt_price(new)} "
                              f"(у вас {fmt_price(apply_markup(new, pct, fixed, step))})")
             shown += 1
         if d.added:
-            lines.append(f"➕ новых: {len(d.added)}")
+            block.append(f"➕ новых: {len(d.added)}")
         if d.removed:
-            lines.append(f"➖ пропало: {len(d.removed)}")
+            block.append(f"➖ пропало: {len(d.removed)}")
+        if block:  # не оставляем пустой заголовок, когда строки цен не влезли в лимит
+            lines += ["", f"<b>{html.escape(r.title)}</b>", *block]
     if shown > limit:
         lines.append(f"\n…и ещё {shown - limit} изменений цен. Весь прайс — /excel")
     return "\n".join(lines)

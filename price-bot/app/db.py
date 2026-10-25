@@ -227,15 +227,17 @@ class DB:
 
     def replace_items(self, cat_id: int, sections: list[Section]) -> ImportDiff:
         """Полностью заменяет прайс категории и возвращает, что изменилось."""
+        # Сравниваем по названию и примечанию, без раздела: если поставщик переименовал
+        # заголовок раздела, товар не «пропал и появился», а остался тем же.
         old = {}
         for r in self.items(cat_id):
-            old[(r["section"], r["name"], r["note"])] = r["base_price"]
+            old[(r["name"], r["note"])] = r["base_price"]
 
         new = {}
         rows = []
         for s in sections:
             for it in s.items:
-                new[(s.title, it.name, it.note)] = it.price
+                new[(it.name, it.note)] = it.price
                 rows.append((cat_id, s.title, it.name, it.note, it.price, len(rows)))
 
         with self.conn:
@@ -248,9 +250,9 @@ class DB:
         return ImportDiff(
             total=len(rows),
             previous=len(old),
-            added=[(_item_label(*k), p) for k, p in new.items() if k not in old],
-            removed=[(_item_label(*k), p) for k, p in old.items() if k not in new],
-            changed=[(_item_label(*k), old[k], p) for k, p in new.items() if k in old and old[k] != p],
+            added=[(_item_label("", *k), p) for k, p in new.items() if k not in old],
+            removed=[(_item_label("", *k), p) for k, p in old.items() if k not in new],
+            changed=[(_item_label("", *k), old[k], p) for k, p in new.items() if k in old and old[k] != p],
         )
 
     def guess_category(self, sections: list[Section]) -> int | None:
@@ -292,7 +294,8 @@ class DB:
             "SELECT c.*, i.base_price, cat.title AS cat_title, cat.markup_pct, cat.markup_fixed "
             "FROM cart c "
             "LEFT JOIN categories cat ON cat.id = c.category_id "
-            "LEFT JOIN items i ON i.category_id = c.category_id AND i.section = c.section "
+            # без раздела: переименованный поставщиком раздел не должен «терять» товар в корзине
+            "LEFT JOIN items i ON i.category_id = c.category_id "
             "  AND i.name = c.name AND i.note = c.note "
             "WHERE c.user_id = ? GROUP BY c.id ORDER BY c.id",
             (user_id,),

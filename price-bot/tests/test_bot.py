@@ -451,3 +451,15 @@ def test_collected_import_refuses_mass_changes():
     text, _ = handle(db, cfg, collected)
     assert "10 из 10 позиций выглядят иначе" in text and "цены не изменены" in text
     assert db.items(db.find_category_by_title("iPhone 18 Pro")["id"])[0]["note"] == "🇺🇸e sim"
+
+
+def test_renamed_section_is_not_added_and_removed():
+    db = DB(":memory:")
+    cat = db.add_category("Samsung")
+    db.replace_items(cat, parse_post("Смартфоны\nGalaxy S26 256 Black — 90 000\nGalaxy A57 128 Blue — 30 000"))
+    db.add_to_cart(5, db.items(cat)[0])
+    diff = db.replace_items(cat, parse_post("Samsung Galaxy 2026\nGalaxy S26 256 Black — 88 000\n"
+                                            "Galaxy A57 128 Blue — 30 000"))
+    assert (diff.added, diff.removed) == ([], [])
+    assert diff.changed == [("Galaxy S26 256 Black", 90000, 88000)]
+    assert db.cart_lines(5)[0].cost == 88000  # корзина не потеряла товар из переименованного раздела

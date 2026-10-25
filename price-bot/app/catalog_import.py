@@ -110,11 +110,12 @@ def preview_removals(db: DB, catalog: Catalog) -> tuple[int, list[str], list[str
     previous, removed, added = 0, [], []
     for c in catalog.categories:
         cat = _existing_category(db, catalog, c)
-        old = {(r["section"], r["name"], r["note"]) for r in db.items(cat["id"])} if cat else set()
-        new = {(s.title, it.name, it.note) for s in c.sections for it in s.items}
+        # без раздела — как в DB.replace_items
+        old = {(r["name"], r["note"]) for r in db.items(cat["id"])} if cat else set()
+        new = {(it.name, it.note) for s in c.sections for it in s.items}
         previous += len(old)
-        removed += [" ".join(p for p in k[1:] if p) for k in old - new]
-        added += [" ".join(p for p in k[1:] if p) for k in new - old]
+        removed += [" ".join(p for p in k if p) for k in old - new]
+        added += [" ".join(p for p in k if p) for k in new - old]
     return previous, removed, added
 
 
