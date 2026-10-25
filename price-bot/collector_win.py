@@ -14,11 +14,14 @@ import json
 import logging
 import subprocess
 import sys
+import time
 from pathlib import Path
 
 from app import collector
 
 HERE = Path(__file__).resolve().parent
+ATTEMPTS = 3
+RETRY_PAUSE = 120  # секунд между попытками
 log = logging.getLogger("collector")
 
 
@@ -65,8 +68,15 @@ def upload(s: dict, local: Path, remote_path: str) -> None:
 def run(s: dict, report: bool) -> int:
     supplier = json.loads(remote(s, "supplier"))
     log.info("Канал %s, кнопок меню: %s", supplier.get("name"), len(supplier["menu"]))
-    result = asyncio.run(collector.fetch(supplier, s["PROFILE_DIR"]))
-    log.info("Прочитано постов: %s, успех: %s", len(result.get("posts", {})), result["ok"])
+    for attempt in range(1, ATTEMPTS + 1):
+        result = asyncio.run(collector.fetch(supplier, s["PROFILE_DIR"]))
+        log.info("Прочитано постов: %s, успех: %s", len(result.get("posts", {})), result["ok"])
+        if result["ok"] or not result.get("retry", True) or attempt == ATTEMPTS:
+            break
+        # Временный сбой (Telegram долго грузится, сеть): не тревожим владельца, пробуем ещё раз
+        log.warning("Попытка %s из %s не удалась: %s — повтор через %s с", attempt, ATTEMPTS,
+                    result.get("error"), RETRY_PAUSE)
+        time.sleep(RETRY_PAUSE)
     local = HERE / "collected.json"
     local.write_text(json.dumps(result, ensure_ascii=False), encoding="utf-8")
     remote_file = f"{s['REMOTE_DIR']}/data/collected.json"

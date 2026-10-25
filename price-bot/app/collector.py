@@ -15,6 +15,7 @@ WEB_URL = os.getenv("COLLECTOR_WEB_URL", "https://web.telegram.org/a/")
 LOGGED_IN_SEL = "#LeftColumn, .chat-list, #MiddleColumn"
 MESSAGE_SEL = "[data-message-id], .Message[id^='message']"
 SEARCH_SEL = "#telegram-search-input, input[placeholder='Search'], input[placeholder='Поиск']"
+PAGE_TIMEOUT = 60_000  # мс; веб-версия Telegram иногда грузится долго
 MIN_COVERAGE = 0.8  # доля постов из меню, которые обязательно должны прочитаться
 RESULT_FORMAT = "avior-collected-1"
 
@@ -64,7 +65,7 @@ async def login(profile_dir: str, timeout: int = 600) -> bool:
     async with async_playwright() as pw:
         context = await open_browser(pw, profile_dir, headless=False)
         page = context.pages[0] if context.pages else await context.new_page()
-        await page.goto(WEB_URL)
+        await page.goto(WEB_URL, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
         print("В открывшемся окне войдите в Telegram аккаунтом сборщика:\n"
               "  на телефоне Telegram → Настройки → Устройства → «Подключить устройство» → отсканируйте QR-код.\n"
               "Если включён облачный пароль — введите его в окне.")
@@ -84,7 +85,7 @@ async def login(profile_dir: str, timeout: int = 600) -> bool:
 
 async def open_chat(page, chat_id: int, name: str) -> None:
     """Открывает канал: по адресу, иначе — кликом в списке чатов, иначе — через поиск."""
-    await page.goto(f"{WEB_URL}#{chat_id}")
+    await page.goto(f"{WEB_URL}#{chat_id}", wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
     try:
         await page.wait_for_selector(MESSAGE_SEL, timeout=15_000)
         return
@@ -123,8 +124,9 @@ def chat_id_of(supplier: dict) -> int:
     return int(f"-100{supplier['id']}") if "channel" in kind or "supergroup" in kind else -supplier["id"]
 
 
-def failure(error: str, screenshot: bytes | None = None) -> dict:
-    return {"format": RESULT_FORMAT, "ok": False, "error": error,
+def failure(error: str, screenshot: bytes | None = None, retry: bool = True) -> dict:
+    """retry=False — повторять бесполезно (например, нужно заново войти в Telegram)."""
+    return {"format": RESULT_FORMAT, "ok": False, "error": error, "retry": retry,
             "screenshot": base64.b64encode(screenshot).decode() if screenshot else None}
 
 
@@ -137,11 +139,11 @@ async def fetch(supplier: dict, profile_dir: str) -> dict:
         context = await open_browser(pw, profile_dir)
         page = context.pages[0] if context.pages else await context.new_page()
         try:
-            await page.goto(WEB_URL)
+            await page.goto(WEB_URL, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
             await page.wait_for_timeout(5000)
             if not await is_logged_in(page):
                 return failure("сборщик не вошёл в Telegram (сессия закончилась) — на Windows-сервере "
-                               "запустите collector_win.py login", await page.screenshot())
+                               "запустите collector_win.py login", await page.screenshot(), retry=False)
             posts = await read_channel(page, chat_id_of(supplier), supplier.get("name", ""))
             menu_ids = {msg_id for _, msg_id in supplier["menu"]}
             found = menu_ids & posts.keys()
