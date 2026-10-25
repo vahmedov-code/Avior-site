@@ -13,6 +13,8 @@ import time
 
 WEB_URL = os.getenv("COLLECTOR_WEB_URL", "https://web.telegram.org/a/")
 LOGGED_IN_SEL = "#LeftColumn, .chat-list, #MiddleColumn"
+# Экран входа Telegram Web: QR-код, номер телефона, код, облачный пароль
+AUTH_SEL = "#auth-qr-form, #auth-phone-number-form, #auth-code-form, #auth-password-form, .auth-form"
 MESSAGE_SEL = "[data-message-id], .Message[id^='message']"
 SEARCH_SEL = "#telegram-search-input, input[placeholder='Search'], input[placeholder='Поиск']"
 PAGE_TIMEOUT = 60_000  # мс; веб-версия Telegram иногда грузится долго
@@ -56,6 +58,16 @@ async def open_browser(playwright, profile_dir: str, headless: bool = True):
 
 async def is_logged_in(page) -> bool:
     return await page.locator(LOGGED_IN_SEL).count() > 0
+
+
+async def wait_login_state(page, timeout: int = PAGE_TIMEOUT) -> bool | None:
+    """Ждём, пока Telegram Web дорисует страницу: True — список чатов, False — экран входа,
+    None — не появилось ни то ни другое (страница не догрузилась)."""
+    try:
+        await page.wait_for_selector(f"{LOGGED_IN_SEL}, {AUTH_SEL}", state="attached", timeout=timeout)
+    except Exception:
+        return None
+    return await is_logged_in(page)
 
 
 async def login(profile_dir: str, timeout: int = 600) -> bool:
@@ -140,8 +152,10 @@ async def fetch(supplier: dict, profile_dir: str) -> dict:
         page = context.pages[0] if context.pages else await context.new_page()
         try:
             await page.goto(WEB_URL, wait_until="domcontentloaded", timeout=PAGE_TIMEOUT)
-            await page.wait_for_timeout(5000)
-            if not await is_logged_in(page):
+            state = await wait_login_state(page)
+            if state is None:
+                return failure("веб-версия Telegram не загрузилась за минуту", await page.screenshot())
+            if state is False:
                 return failure("сборщик не вошёл в Telegram (сессия закончилась) — на Windows-сервере "
                                "запустите collector_win.py login", await page.screenshot(), retry=False)
             posts = await read_channel(page, chat_id_of(supplier), supplier.get("name", ""))
