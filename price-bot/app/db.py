@@ -440,6 +440,10 @@ class DB:
         with self.conn:
             self.conn.execute("UPDATE used_items SET status = ? WHERE id = ?", (status, used_id))
 
+    def set_used_kind(self, used_id: int, kind: str) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE used_items SET kind = ? WHERE id = ?", (kind, used_id))
+
     def set_used_price(self, used_id: int, price: int) -> None:
         with self.conn:
             self.conn.execute("UPDATE used_items SET price = ? WHERE id = ?", (price, used_id))
