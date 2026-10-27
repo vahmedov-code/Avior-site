@@ -1,4 +1,5 @@
 import asyncio
+import html
 import logging
 
 from aiogram import Bot, Dispatcher
@@ -6,7 +7,7 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import BotCommand, BotCommandScopeChat
+from aiogram.types import BotCommand, BotCommandScopeChat, ErrorEvent
 
 from . import handlers_admin, handlers_used, handlers_user
 from .config import Config
@@ -55,6 +56,22 @@ async def set_menus(bot: Bot, cfg: Config, attempts: int = 10) -> None:
             await asyncio.sleep(60)
 
 
+def error_reporter(bot: Bot, cfg: Config):
+    async def on_error(event: ErrorEvent) -> None:
+        """Сбой в обработчике: в журнал и владельцу в Telegram — иначе клиент видит, что бот «молчит»."""
+        logging.error("Ошибка при обработке обновления", exc_info=event.exception)
+        upd = event.update
+        what = (upd.message and (upd.message.text or "фото/файл")) or (upd.callback_query and upd.callback_query.data) or ""
+        text = (f"⚠️ <b>Ошибка в боте</b>\n{html.escape(type(event.exception).__name__)}: "
+                f"{html.escape(str(event.exception))[:700]}\n\nНа чём: <code>{html.escape(str(what))[:100]}</code>")
+        for admin_id in cfg.admin_ids:
+            try:
+                await bot.send_message(admin_id, text)
+            except Exception:
+                pass
+    return on_error
+
+
 async def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     cfg = Config.from_env()
@@ -72,6 +89,7 @@ async def main() -> None:
     # Админский роутер первым: пересланный владельцем прайс должен уйти в импорт.
     # Мастер б/у раньше импорта: фото-файлы в нём не должны уйти в загрузку прайса.
     dp.include_routers(handlers_used.admin_router, handlers_admin.router, handlers_used.router, handlers_user.router)
+    dp.errors.register(error_reporter(bot, cfg))
     dp.message.outer_middleware(VisitMiddleware())
     dp.callback_query.outer_middleware(VisitMiddleware())
 

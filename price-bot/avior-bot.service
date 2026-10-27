@@ -9,7 +9,7 @@ WorkingDirectory=/opt/avior/price-bot
 ExecStart=/opt/avior/price-bot/.venv/bin/python -m app.main
 Restart=always
 RestartSec=5
-MemoryMax=300M
+MemoryMax=1G
 
 [Install]
 WantedBy=multi-user.target
