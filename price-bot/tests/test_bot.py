@@ -515,3 +515,25 @@ def test_watermark_keeps_size():
     assert out.size == (800, 600)
     assert out.getpixel((10, 10)) == (255, 255, 255)  # левый верхний угол не тронут
     assert out.getpixel((800 - 40, 600 - 40)) != (255, 255, 255)  # в правом нижнем — логотип
+
+
+def test_long_section_pages_fit_telegram_limit():
+    from app.config import Config
+    from app.handlers_user import render_section
+    from app.parser import Section
+    db = DB(":memory:")
+    cat_id = db.add_category("Ноутбуки")
+    note = "· Intel Core i9-14900HX · 32GB DDR5 · 1TB SSD · RTX 4090 16GB · 18\" QHD+ 240Hz · Windows 11 Pro " * 2
+    db.replace_items(cat_id, [Section("ASUS", [Item(f"ASUS ROG Strix SCAR 18 G834JYR-R6{i:03}", 300000 + i, note)
+                                               for i in range(60)])])
+    cfg = Config.from_env(for_bot=False)
+    cat = db.category(cat_id)
+    seen, page = [], 0
+    while True:
+        text, markup = render_section(db, cfg, 1, cat, 0, page)
+        assert len(text) <= 4096
+        seen += [b.text for row in markup.inline_keyboard for b in row if b.text.startswith("➕")]
+        if not any(b.text == "▶️" for row in markup.inline_keyboard for b in row):
+            break
+        page += 1
+    assert seen == [f"➕{n}" for n in range(1, 61)]  # каждый товар ровно на одной странице

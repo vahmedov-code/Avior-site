@@ -87,14 +87,38 @@ async def cb_contacts(call: CallbackQuery, cfg: Config):
     await call.answer()
 
 
+PAGE_CHARS = 3300  # Telegram принимает до 4096 символов; остальное — заголовок и подсказка
+
+
+def item_line(db: DB, cat, no: int, it) -> str:
+    line = f"{no}. {html.escape(it['name'])} — <b>{fmt_price(db.sell_price(it, cat))}</b>"
+    if it["note"]:
+        line += f" {html.escape(it['note'])}"
+    return line
+
+
+def paginate(lengths: list[int]) -> list[tuple[int, int]]:
+    """Страницы (начало, конец): не больше PAGE_SIZE позиций и PAGE_CHARS символов —
+    у части поставщиков длинные названия и примечания, 25 таких строк не влезают в сообщение."""
+    pages, start, size = [], 0, 0
+    for i, n in enumerate(lengths):
+        if i > start and (i - start >= PAGE_SIZE or size + n > PAGE_CHARS):
+            pages.append((start, i))
+            start, size = i, 0
+        size += n + 1
+    pages.append((start, len(lengths)))
+    return pages
+
+
 def render_section(db: DB, cfg: Config, user_id: int, cat, sec_idx: int, page: int):
     sections = db.sections(cat["id"])
     section = sections[sec_idx]
     items = db.items(cat["id"], section)
-    pages = max(1, (len(items) + PAGE_SIZE - 1) // PAGE_SIZE)
+    all_lines = [item_line(db, cat, no, it) for no, it in enumerate(items, start=1)]
+    bounds = paginate([len(line) for line in all_lines])
+    pages = len(bounds)
     page = max(0, min(page, pages - 1))
-    start = page * PAGE_SIZE
-    chunk = items[start:start + PAGE_SIZE]
+    start, end = bounds[page]
 
     header = f"<b>{html.escape(cat['title'])}</b>"
     if section and section != cat["title"]:
@@ -106,13 +130,8 @@ def render_section(db: DB, cfg: Config, user_id: int, cat, sec_idx: int, page: i
         header += f"\nСтраница {page + 1} из {pages}"
 
     lines = [header, "", "Нажмите ➕ с номером товара, чтобы добавить его в корзину.", ""]
-    numbered = []
-    for no, it in enumerate(chunk, start=start + 1):
-        line = f"{no}. {html.escape(it['name'])} — <b>{fmt_price(db.sell_price(it, cat))}</b>"
-        if it["note"]:
-            line += f" {html.escape(it['note'])}"
-        lines.append(line)
-        numbered.append((no, it["id"]))
+    lines += [line[:PAGE_CHARS] for line in all_lines[start:end]]  # одна строка-гигант тоже не должна ломать страницу
+    numbered = [(no, items[no - 1]["id"]) for no in range(start + 1, end + 1)]
 
     back = f"c:{cat['id']}" if len(sections) > 1 else "home"
     markup = kb.section_page(
