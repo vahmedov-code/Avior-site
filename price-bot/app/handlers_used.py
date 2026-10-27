@@ -56,6 +56,8 @@ class UsedAdd(StatesGroup):
     price = State()
     photos = State()
     saving = State()
+    confirm = State()
+    edit = State()
 
 
 class UsedPrice(StatesGroup):
@@ -429,24 +431,50 @@ async def on_not_photo(message: Message):
     await message.answer("Жду фото устройства. Когда всё загрузите — «✅ Готово».", reply_markup=done_button())
 
 
-def saved_markup(used_id: int, current: str) -> InlineKeyboardMarkup:
+# Что можно исправить в карточке перед публикацией: поле → (кнопка, вопрос)
+EDITABLE = {
+    "model": ("Модель", "Новое название модели:"),
+    "battery": ("АКБ", "Процент аккумулятора (например <code>89</code>) или <code>нет</code>:"),
+    "condition": ("Состояние", "Внешнее состояние:"),
+    "comment": ("Комментарий", "Комплект и комментарий (<code>-</code> — убрать):"),
+    "price": ("Цена", "Цена, ₽ (можно с закупкой: <code>45000/38000</code>):"),
+}
+
+
+def preview_markup(kind: str) -> InlineKeyboardMarkup:
     b = InlineKeyboardBuilder()
-    for kind in KIND_NAMES:
-        b.button(text=("✅ " if kind == current else "") + kind, callback_data=f"bukind:{used_id}:{kind}")
-    b.adjust(3)
-    b.row(InlineKeyboardButton(text="👀 Посмотреть", callback_data=f"bi:{used_id}"),
-          InlineKeyboardButton(text="📋 Все устройства", callback_data="bulist"))
-    b.row(InlineKeyboardButton(text="➕ Добавить ещё", callback_data="buadd"))
+    b.row(InlineKeyboardButton(text="✅ Опубликовать", callback_data="bupub"))
+    b.row(*[InlineKeyboardButton(text=f"✏️ {label}", callback_data=f"buedit:{field}")
+            for field, (label, _) in list(EDITABLE.items())[:3]])
+    b.row(*[InlineKeyboardButton(text=f"✏️ {label}", callback_data=f"buedit:{field}")
+            for field, (label, _) in list(EDITABLE.items())[3:]],
+          InlineKeyboardButton(text="📷 Фото заново", callback_data="buphotos"))
+    kinds = InlineKeyboardBuilder()
+    for k in KIND_NAMES:
+        kinds.button(text=("📂 " if k == kind else "") + k, callback_data=f"bukind:{k}")
+    kinds.adjust(3)
+    b.attach(kinds)
+    b.row(InlineKeyboardButton(text="✖ Отмена", callback_data="bux"))
     return b.as_markup()
 
 
-def saved_text(row) -> str:
-    return (f"✅ <b>Сохранено и уже на витрине</b>: {html.escape(row['model'])} — {fmt_price(row['price'])}, №{row['id']}\n"
-            f"Раздел: <b>{USED_LABEL} › {html.escape(row['kind'])}</b> — если не тот, выберите кнопкой ниже.")
+def preview_caption(cfg: Config, data: dict) -> str:
+    note = (f"\n\n👆 <b>Проверьте карточку.</b> Раздел: {USED_LABEL} › {html.escape(data['kind'])}, "
+            f"фото: {len(data['marked'])}.\nЕсли всё верно — «✅ Опубликовать», до этого клиенты устройство не видят.")
+    card = card_text(cfg, data)
+    return card[:1024 - len(note)] + note  # лимит подписи к фото
+
+
+async def send_preview(message: Message, state: FSMContext, cfg: Config) -> None:
+    """Карточка целиком, как её увидит клиент, и кнопки: опубликовать или исправить."""
+    await state.set_state(UsedAdd.confirm)
+    data = await state.get_data()
+    await message.answer_photo(data["marked"][0], caption=preview_caption(cfg, data),
+                               reply_markup=preview_markup(data["kind"]))
 
 
 @admin_router.callback_query(StateFilter(UsedAdd.photos), F.data == "budone")
-async def cb_photos_done(call: CallbackQuery, state: FSMContext, bot: Bot, db: DB, cfg: Config):
+async def cb_photos_done(call: CallbackQuery, state: FSMContext, bot: Bot, cfg: Config):
     data = await state.get_data()
     if not data.get("photos"):
         await call.answer("Нужно хотя бы одно фото", show_alert=True)
@@ -470,31 +498,101 @@ async def cb_photos_done(call: CallbackQuery, state: FSMContext, bot: Bot, db: D
         await call.message.answer("Не получилось обработать фото — пришлите их ещё раз.", reply_markup=done_button())
         return
 
-    # Отправляем фото с логотипом себе — так у Telegram появляются их file_id для витрины,
-    # а владелец сразу видит карточку глазами клиента.
-    caption = card_text(cfg, data)
+    # Фото с логотипом отправляем себе: так у Telegram появляются их file_id для витрины
     if len(ready) == 1:
-        sent = [await call.message.answer_photo(ready[0], caption=caption)]
+        sent = [await call.message.answer_photo(ready[0], caption="Фото с логотипом")]
     else:
-        media = [InputMediaPhoto(media=f, caption=caption if i == 0 else None) for i, f in enumerate(ready)]
+        media = [InputMediaPhoto(media=f, caption="Фото с логотипом" if i == 0 else None) for i, f in enumerate(ready)]
         sent = await call.message.answer_media_group(media)
-    used_id = db.add_used(data["kind"], data["model"], data["battery"], data["condition"], data["comment"],
-                          data["price"], data["cost"], [m.photo[-1].file_id for m in sent])
-    await state.clear()
-    row = db.used(used_id)
-    await call.message.answer(saved_text(row), reply_markup=saved_markup(used_id, row["kind"]))
+    await state.update_data(marked=[m.photo[-1].file_id for m in sent])
+    await send_preview(call.message, state, cfg)
 
 
-@admin_router.callback_query(F.data.startswith("bukind:"))
-async def cb_set_kind(call: CallbackQuery, db: DB):
-    _, used_id, kind = call.data.split(":", 2)
-    row = db.used(int(used_id))
-    if not row or kind not in KIND_NAMES:
+@admin_router.callback_query(StateFilter(UsedAdd.confirm), F.data.startswith("bukind:"))
+async def cb_set_kind(call: CallbackQuery, state: FSMContext, cfg: Config):
+    kind = call.data.split(":", 1)[1]
+    if kind not in KIND_NAMES:
         await call.answer()
         return
-    db.set_used_kind(row["id"], kind)
-    await safe_edit(call, saved_text(db.used(row["id"])), saved_markup(row["id"], kind))
+    await state.update_data(kind=kind)
+    data = await state.get_data()
+    try:
+        await call.message.edit_caption(caption=preview_caption(cfg, data), reply_markup=preview_markup(kind))
+    except TelegramBadRequest:
+        pass
     await call.answer(f"Раздел: {kind}")
+
+
+@admin_router.callback_query(StateFilter(UsedAdd.confirm), F.data.startswith("buedit:"))
+async def cb_edit(call: CallbackQuery, state: FSMContext):
+    field = call.data.split(":", 1)[1]
+    if field not in EDITABLE:
+        await call.answer()
+        return
+    await state.update_data(editing=field)
+    await state.set_state(UsedAdd.edit)
+    await call.message.answer(EDITABLE[field][1], reply_markup=buttons([("⬅️ Не менять", "buback")]))
+    await call.answer()
+
+
+@admin_router.callback_query(StateFilter(UsedAdd.edit), F.data == "buback")
+async def cb_edit_back(call: CallbackQuery, state: FSMContext, cfg: Config):
+    await call.message.edit_reply_markup(reply_markup=None)
+    await send_preview(call.message, state, cfg)
+    await call.answer()
+
+
+@admin_router.message(StateFilter(UsedAdd.edit), F.text, ~F.text.startswith("/"))
+async def on_edit(message: Message, state: FSMContext, cfg: Config):
+    field = (await state.get_data())["editing"]
+    text = message.text.strip()
+    if field == "model":
+        model = " ".join(text.split())[:120]
+        await state.update_data(model=model, kind=guess_kind(model))
+    elif field == "battery":
+        battery = "" if text.lower() in ("нет", "-") else parse_battery(text)
+        if battery is None:
+            await message.answer("Напишите число от 1 до 100 или <code>нет</code>.", reply_markup=buttons([("⬅️ Не менять", "buback")]))
+            return
+        await state.update_data(battery=battery)
+    elif field == "condition":
+        await state.update_data(condition=text[:200])
+    elif field == "comment":
+        await state.update_data(comment="" if text == "-" else text[:500])
+    else:
+        parsed = parse_price(text)
+        if not parsed:
+            await message.answer("Не понял цену. Пример: <code>45000</code> или <code>45000/38000</code>",
+                                 reply_markup=buttons([("⬅️ Не менять", "buback")]))
+            return
+        await state.update_data(price=parsed[0], cost=parsed[1])
+    await send_preview(message, state, cfg)
+
+
+@admin_router.callback_query(StateFilter(UsedAdd.confirm), F.data == "buphotos")
+async def cb_redo_photos(call: CallbackQuery, state: FSMContext):
+    await state.update_data(photos=[], marked=[])
+    await state.set_state(UsedAdd.photos)
+    await call.message.answer(f"Пришлите фото заново (до {MAX_PHOTOS}), потом «✅ Готово».", reply_markup=done_button())
+    await call.answer()
+
+
+@admin_router.callback_query(StateFilter(UsedAdd.confirm), F.data == "bupub")
+async def cb_publish(call: CallbackQuery, state: FSMContext, db: DB):
+    data = await state.get_data()
+    used_id = db.add_used(data["kind"], data["model"], data["battery"], data["condition"], data["comment"],
+                          data["price"], data["cost"], data["marked"])
+    await state.clear()
+    try:
+        await call.message.edit_reply_markup(reply_markup=None)
+    except TelegramBadRequest:
+        pass
+    await call.message.answer(
+        f"✅ <b>Опубликовано</b>: {html.escape(data['model'])} — {fmt_price(data['price'])}\n"
+        f"Раздел {USED_LABEL} › {html.escape(data['kind'])}, №{used_id}. Клиенты уже видят устройство.",
+        reply_markup=buttons([("👀 Посмотреть", f"bi:{used_id}"), ("📋 Все устройства", "bulist")],
+                             [("➕ Добавить ещё", "buadd")]))
+    await call.answer("Опубликовано")
 
 
 # --- управление с карточки ---
