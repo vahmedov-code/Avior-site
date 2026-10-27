@@ -15,6 +15,8 @@ DEFAULT_CONTACTS = (
     "• СДЭК\n"
     "• Ozon доставка"
 )
+DEFAULT_USED_NOTE = ("Устройства приняты сервисом AVIOR в трейд-ин и проверены нашими мастерами. "
+                     "Посмотреть и проверить можно перед покупкой: Москва, Можайское ш., 4к1.")
 DEFAULT_DELIVERY = "🚚 Курьер по Москве,📦 СДЭК,📦 Ozon доставка,🏬 Самовывоз (Можайское ш. 4к1)"
 
 
@@ -50,6 +52,7 @@ class Config:
     default_skip_categories: tuple[str, ...] = ("Телевизоры", "Быт.Техника")
     default_merge_categories: tuple[tuple[str, str], ...] = (("Игровые Ноутбуки", "Ноутбуки"), ("Пылесосы", "Dyson"))
     default_only_words: tuple[tuple[str, str], ...] = (("Пылесосы", "dyson"),)
+    used_note: str = DEFAULT_USED_NOTE
 
     @classmethod
     def from_env(cls, for_bot: bool = True) -> "Config":
@@ -77,6 +80,7 @@ class Config:
             delivery_options=tuple(
                 o.strip() for o in os.getenv("DELIVERY_OPTIONS", DEFAULT_DELIVERY).split(",") if o.strip()
             ),
+            used_note=_text("USED_NOTE", DEFAULT_USED_NOTE),
             accessory_markup_fixed=int(os.getenv("ACCESSORY_MARKUP", "5000")),
             accessory_words=_words("ACCESSORY_WORDS", DEFAULT_ACCESSORY_WORDS),
             default_exclude_words=_words("EXCLUDE_WORDS", DEFAULT_EXCLUDE_WORDS),

@@ -37,8 +37,10 @@ def welcome(cfg: Config) -> str:
     )
 
 
-def main_menu(db: DB, user_id: int):
-    return kb.main_menu(db.categories(), db.cart_count(user_id))
+def main_menu(db: DB, user_id: int, cfg: Config):
+    # владельцу раздел б/у виден и пустым — оттуда добавляются устройства
+    show_used = bool(db.used_kinds()) or user_id in cfg.admin_ids
+    return kb.main_menu(db.categories(), db.cart_count(user_id), show_used)
 
 
 async def safe_edit(call: CallbackQuery, text: str, markup) -> None:
@@ -69,13 +71,13 @@ def user_link(user) -> str:
 @router.message(CommandStart())
 async def cmd_start(message: Message, state: FSMContext, db: DB, cfg: Config):
     await state.clear()
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id))
+    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))
 
 
 @router.callback_query(F.data == "home")
 async def cb_home(call: CallbackQuery, state: FSMContext, db: DB, cfg: Config):
     await state.clear()
-    await safe_edit(call, welcome(cfg), main_menu(db, call.from_user.id))
+    await safe_edit(call, welcome(cfg), main_menu(db, call.from_user.id, cfg))
     await call.answer()
 
 
@@ -246,7 +248,7 @@ async def cb_delivery(call: CallbackQuery, state: FSMContext, cfg: Config):
 async def checkout_cancel(message: Message, state: FSMContext, db: DB, cfg: Config):
     await state.clear()
     await message.answer("Оформление отменено, корзина сохранена.", reply_markup=ReplyKeyboardRemove())
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id))
+    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))
 
 
 @router.message(StateFilter(Checkout.phone), F.contact | F.text)
@@ -274,7 +276,7 @@ async def checkout_phone(message: Message, state: FSMContext, bot: Bot, db: DB, 
         f"Получение: {html.escape(order['delivery'])}\n\nМы скоро свяжемся с вами для подтверждения.",
         reply_markup=ReplyKeyboardRemove(),
     )
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, user.id))
+    await message.answer(welcome(cfg), reply_markup=main_menu(db, user.id, cfg))
 
 
 ORDER_STATUS = {"new": "🆕 новый", "ok": "✅ подтверждён", "no": "❌ отменён"}
@@ -293,7 +295,8 @@ def render_order_for_admin(db: DB, order) -> str:
     ]
     for no, it in enumerate(db.order_items(order), start=1):
         qty = f"{it['qty']} × " if it["qty"] > 1 else ""
-        out.append(f"{no}. {html.escape(it['name'])} — {qty}{fmt_price(it['price'])} (закуп {fmt_price(it['cost'])})")
+        cost = f" (закуп {fmt_price(it['cost'])})" if it.get("cost") is not None else ""
+        out.append(f"{no}. {html.escape(it['name'])} — {qty}{fmt_price(it['price'])}{cost}")
         if it.get("path"):
             out.append(f"    📂 {html.escape(it['path'])}")
     out += [
@@ -323,4 +326,4 @@ async def lead_text(message: Message, state: FSMContext, bot: Bot, db: DB, cfg: 
     await notify_admins(bot, cfg, f"💬 <b>Вопрос</b> от {user_link(message.from_user)}\n\n{html.escape(message.text)}")
     await state.clear()
     await message.answer("✅ Спасибо! Вопрос отправлен, скоро ответим.")
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id))
+    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))

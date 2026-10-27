@@ -463,3 +463,55 @@ def test_renamed_section_is_not_added_and_removed():
     assert (diff.added, diff.removed) == ([], [])
     assert diff.changed == [("Galaxy S26 256 Black", 90000, 88000)]
     assert db.cart_lines(5)[0].cost == 88000  # корзина не потеряла товар из переименованного раздела
+
+
+def test_used_kind_and_inputs():
+    from app.handlers_used import guess_kind, parse_battery, parse_price
+    assert guess_kind("iPhone 13 Pro 256GB") == "Смартфоны"
+    assert guess_kind("Samsung Galaxy Tab S9") == "Планшеты"
+    assert guess_kind("Galaxy Watch 6") == "Часы"
+    assert guess_kind("MacBook Air M2") == "Ноутбуки"
+    assert guess_kind("AirPods Pro 2") == "Наушники"
+    assert guess_kind("PlayStation 5") == "Другое"
+    assert parse_battery("89") == parse_battery("89 %") == "89%"
+    assert parse_battery("150") is None
+    assert parse_battery("312 циклов") == "312 циклов"
+    assert parse_price("45 000") == (45000, None)
+    assert parse_price("45000/38000") == (45000, 38000)
+    assert parse_price("сорок") is None
+
+
+def test_used_device_cart_order_lifecycle():
+    db = DB(":memory:")
+    uid = db.add_used("Смартфоны", "iPhone 13 128GB", "89%", "Отличное", "", 45000, None, ["f1", "f2"])
+    assert db.used_kinds() == [("Смартфоны", 1)]
+    row = db.used(uid)
+    db.add_used_to_cart(1, row)
+    db.add_used_to_cart(1, row)  # устройство одно — количество не растёт
+    db.add_used_to_cart(2, row)
+    [line] = db.cart_lines(1)
+    assert (line.qty, line.price, line.used_id, line.path) == (1, 45000, uid, "♻️ Б/у › Смартфоны")
+
+    order_id = db.create_order(1, "Иван", None, "+79000000000", "Самовывоз", db.cart_lines(1))
+    order = db.order(order_id)
+    assert (order["total"], order["cost"]) == (45000, 45000)  # закупка не указана — наценку не выдумываем
+    assert db.used(uid)["status"] == "reserved" and db.used_kinds() == []
+    assert not db.cart_lines(2)[0].available  # у второго покупателя — «закончился»
+
+    db.set_order_status(order_id, "no")
+    assert db.used(uid)["status"] == "active"
+    order_id = db.create_order(2, "Пётр", None, "+79000000001", "Курьер", db.cart_lines(2))
+    db.set_order_status(order_id, "ok")
+    assert db.used(uid)["status"] == "sold"
+
+
+def test_watermark_keeps_size():
+    import io
+    from PIL import Image
+    from app.watermark import apply
+    buf = io.BytesIO()
+    Image.new("RGB", (800, 600), "white").save(buf, "PNG")
+    out = Image.open(io.BytesIO(apply(buf.getvalue())))
+    assert out.size == (800, 600)
+    assert out.getpixel((10, 10)) == (255, 255, 255)  # левый верхний угол не тронут
+    assert out.getpixel((800 - 40, 600 - 40)) != (255, 255, 255)  # в правом нижнем — логотип

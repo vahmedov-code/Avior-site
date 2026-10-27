@@ -77,7 +77,24 @@ CREATE TABLE IF NOT EXISTS orders (
     status     TEXT NOT NULL DEFAULT 'new',
     created_at INTEGER NOT NULL
 );
+-- Б/у устройства, принятые в трейд-ин и проверенные мастерами; цена — без наценки.
+-- status: active — на витрине, reserved — в оформленном заказе, sold — продано, hidden — снято
+CREATE TABLE IF NOT EXISTS used_items (
+    id         INTEGER PRIMARY KEY,
+    kind       TEXT NOT NULL,
+    model      TEXT NOT NULL,
+    battery    TEXT NOT NULL DEFAULT '',
+    condition  TEXT NOT NULL DEFAULT '',
+    comment    TEXT NOT NULL DEFAULT '',
+    price      INTEGER NOT NULL,
+    cost       INTEGER,
+    photos     TEXT NOT NULL DEFAULT '[]',
+    status     TEXT NOT NULL DEFAULT 'active',
+    created_at INTEGER NOT NULL
+);
 """
+
+USED_LABEL = "♻️ Б/у"
 
 
 @dataclass
@@ -89,6 +106,7 @@ class CartLine:
     qty: int
     price: int | None  # цена продажи сейчас; None — позиции больше нет в прайсе
     cost: int | None   # закупка
+    used_id: int | None = None  # б/у устройство — единственный экземпляр
 
     @property
     def path(self) -> str:
@@ -125,6 +143,9 @@ class DB:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.executescript(SCHEMA)
+        # корзина из версии без б/у: добавляем ссылку на устройство
+        if "used_id" not in {r["name"] for r in self.conn.execute("PRAGMA table_info(cart)")}:
+            self.conn.execute("ALTER TABLE cart ADD COLUMN used_id INTEGER")
 
     # --- настройки ---
     def get_setting(self, key: str, default: str | None = None) -> str | None:
@@ -291,8 +312,10 @@ class DB:
 
     def cart_lines(self, user_id: int) -> list[CartLine]:
         rows = self.conn.execute(
-            "SELECT c.*, i.base_price, cat.title AS cat_title, cat.markup_pct, cat.markup_fixed "
+            "SELECT c.*, i.base_price, cat.title AS cat_title, cat.markup_pct, cat.markup_fixed, "
+            "u.price AS used_price, u.cost AS used_cost "
             "FROM cart c "
+            "LEFT JOIN used_items u ON u.id = c.used_id AND u.status = 'active' "
             "LEFT JOIN categories cat ON cat.id = c.category_id "
             # без раздела: переименованный поставщиком раздел не должен «терять» товар в корзине
             "LEFT JOIN items i ON i.category_id = c.category_id "
@@ -303,18 +326,22 @@ class DB:
         lines = []
         for r in rows:
             price = cost = None
-            if r["base_price"] is not None:
+            if r["used_id"] is not None:
+                if r["used_price"] is not None:
+                    price, cost = r["used_price"], r["used_cost"]
+            elif r["base_price"] is not None:
                 cost = r["base_price"]
                 price = apply_markup(cost, *self.markup(r))
             lines.append(
                 CartLine(
                     cart_id=r["id"],
                     label=_item_label(r["section"], r["name"], r["note"]),
-                    category=r["cat_title"] or "",
+                    category=USED_LABEL if r["used_id"] is not None else (r["cat_title"] or ""),
                     section=r["section"],
                     qty=r["qty"],
                     price=price,
                     cost=cost,
+                    used_id=r["used_id"],
                 )
             )
         return lines
@@ -332,10 +359,12 @@ class DB:
                      lines: list[CartLine]) -> int:
         items = [
             {"name": l.label, "qty": l.qty, "price": l.price, "cost": l.cost, "path": l.path}
+            | ({"used_id": l.used_id} if l.used_id is not None else {})
             for l in lines if l.available
         ]
         total = sum(i["qty"] * i["price"] for i in items)
-        cost = sum(i["qty"] * i["cost"] for i in items)
+        # закупка б/у может быть не указана — тогда считаем её равной цене, чтобы не завышать наценку
+        cost = sum(i["qty"] * (i["price"] if i["cost"] is None else i["cost"]) for i in items)
         with self.conn:
             cur = self.conn.execute(
                 "INSERT INTO orders(user_id, user_name, username, phone, delivery, items, total, cost, created_at) "
@@ -344,6 +373,11 @@ class DB:
                  int(time.time())),
             )
             self.conn.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
+            # б/у устройство в одном экземпляре: пока заказ не подтверждён или не отменён, его не видно на витрине
+            for i in items:
+                if "used_id" in i:
+                    self.conn.execute("UPDATE used_items SET status = 'reserved' WHERE id = ? AND status = 'active'",
+                                      (i["used_id"],))
         return cur.lastrowid
 
     def order(self, order_id: int) -> sqlite3.Row | None:
@@ -353,8 +387,15 @@ class DB:
         return json.loads(order["items"])
 
     def set_order_status(self, order_id: int, status: str) -> None:
+        order = self.order(order_id)
         with self.conn:
             self.conn.execute("UPDATE orders SET status = ? WHERE id = ?", (status, order_id))
+            # подтверждён — б/у продано; отменён — снова на витрине
+            used_status = {"ok": "sold", "no": "active"}.get(status)
+            for i in self.order_items(order) if order and used_status else ():
+                if i.get("used_id") is not None:
+                    self.conn.execute("UPDATE used_items SET status = ? WHERE id = ? AND status IN ('reserved', 'sold')",
+                                      (used_status, i["used_id"]))
 
     def recent_orders(self, limit: int = 10) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM orders ORDER BY id DESC LIMIT ?", (limit,)).fetchall()
@@ -364,6 +405,52 @@ class DB:
             if c["title"].strip().lower() == title.strip().lower():
                 return c
         return None
+
+    # --- б/у ---
+    def add_used(self, kind: str, model: str, battery: str, condition: str, comment: str, price: int,
+                 cost: int | None, photos: list[str]) -> int:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO used_items(kind, model, battery, condition, comment, price, cost, photos, created_at) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (kind, model, battery, condition, comment, price, cost, json.dumps(photos), int(time.time())),
+            )
+        return cur.lastrowid
+
+    def used(self, used_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM used_items WHERE id = ?", (used_id,)).fetchone()
+
+    def used_items(self, kind: str | None = None, status: str = "active") -> list[sqlite3.Row]:
+        if kind is None:
+            return self.conn.execute(
+                "SELECT * FROM used_items WHERE status = ? ORDER BY id DESC", (status,)).fetchall()
+        return self.conn.execute(
+            "SELECT * FROM used_items WHERE status = ? AND kind = ? ORDER BY id DESC", (status, kind)).fetchall()
+
+    def used_kinds(self) -> list[tuple[str, int]]:
+        rows = self.conn.execute(
+            "SELECT kind, COUNT(*) AS n FROM used_items WHERE status = 'active' GROUP BY kind ORDER BY MIN(id)"
+        ).fetchall()
+        return [(r["kind"], r["n"]) for r in rows]
+
+    def used_photos(self, row: sqlite3.Row) -> list[str]:
+        return json.loads(row["photos"])
+
+    def set_used_status(self, used_id: int, status: str) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE used_items SET status = ? WHERE id = ?", (status, used_id))
+
+    def set_used_price(self, used_id: int, price: int) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE used_items SET price = ? WHERE id = ?", (price, used_id))
+
+    def add_used_to_cart(self, user_id: int, row: sqlite3.Row) -> None:
+        """Устройство одно — повторное нажатие не увеличивает количество."""
+        with self.conn:
+            self.conn.execute(
+                "INSERT OR IGNORE INTO cart(user_id, category_id, section, name, note, used_id) VALUES(?, 0, ?, ?, ?, ?)",
+                (user_id, row["kind"], row["model"], f"б/у №{row['id']}", row["id"]),
+            )
 
     # --- статистика ---
     def track_visit(self, user_id: int, username: str | None, full_name: str, day: str) -> None:

@@ -36,11 +36,13 @@ def cart_button(count: int) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=f"🛒 Корзина ({count})", callback_data="cart")
 
 
-def main_menu(categories, cart_count: int = 0) -> InlineKeyboardMarkup:
+def main_menu(categories, cart_count: int = 0, show_used: bool = False) -> InlineKeyboardMarkup:
     kb = InlineKeyboardBuilder()
     for c in categories:
         if c["n_items"]:
             kb.button(text=with_icon(c["title"]), callback_data=f"c:{c['id']}")
+    if show_used:  # раздел б/у — такая же кнопка каталога, последней
+        kb.button(text="♻️ Б/у (проверено)", callback_data="bu")
     kb.adjust(2)
     if cart_count:
         kb.row(cart_button(cart_count))

@@ -8,7 +8,7 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeChat
 
-from . import handlers_admin, handlers_user
+from . import handlers_admin, handlers_used, handlers_user
 from .config import Config
 from .db import DB
 from .stats import VisitMiddleware
@@ -18,6 +18,7 @@ ADMIN_COMMANDS = [
     BotCommand(command=c, description=d) for c, d in (
         ("start", "Каталог и цены (как видят клиенты)"),
         ("stats", "Статистика посещений и заказов"),
+        ("bu", "Б/у: добавить, список, продано"),
         ("orders", "Последние заказы"),
         ("excel", "Прайс с вашими ценами в Excel"),
         ("cats", "Категории, наценки, номера"),
@@ -69,7 +70,8 @@ async def main() -> None:
     bot = Bot(cfg.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True))
     dp = Dispatcher(storage=MemoryStorage(), db=db, cfg=cfg)
     # Админский роутер первым: пересланный владельцем прайс должен уйти в импорт.
-    dp.include_routers(handlers_admin.router, handlers_user.router)
+    # Мастер б/у раньше импорта: фото-файлы в нём не должны уйти в загрузку прайса.
+    dp.include_routers(handlers_used.admin_router, handlers_admin.router, handlers_used.router, handlers_user.router)
     dp.message.outer_middleware(VisitMiddleware())
     dp.callback_query.outer_middleware(VisitMiddleware())
 
