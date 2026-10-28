@@ -114,6 +114,15 @@ CREATE TABLE IF NOT EXISTS repairs (
     status     TEXT NOT NULL,
     updated_at INTEGER NOT NULL
 );
+-- Заказы в CRM, за статусом которых следит клиент (бот периодически проверяет и сообщает об изменениях)
+CREATE TABLE IF NOT EXISTS crm_watch (
+    order_no    TEXT NOT NULL,
+    phone       TEXT NOT NULL,
+    user_id     INTEGER NOT NULL,
+    last_status TEXT NOT NULL,
+    created_at  INTEGER NOT NULL,
+    PRIMARY KEY (order_no, user_id)
+);
 CREATE TABLE IF NOT EXISTS repair_watch (
     number  TEXT NOT NULL,
     user_id INTEGER NOT NULL,
@@ -570,6 +579,26 @@ class DB:
     def watch_repair(self, number: str, user_id: int) -> None:
         with self.conn:
             self.conn.execute("INSERT OR IGNORE INTO repair_watch(number, user_id) VALUES(?, ?)", (number, user_id))
+
+    def watch_crm(self, order_no: str, phone: str, user_id: int, status: str) -> None:
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO crm_watch(order_no, phone, user_id, last_status, created_at) VALUES(?, ?, ?, ?, ?) "
+                "ON CONFLICT(order_no, user_id) DO UPDATE SET phone = excluded.phone, last_status = excluded.last_status",
+                (order_no, phone, user_id, status, int(time.time())),
+            )
+
+    def crm_watches(self) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM crm_watch").fetchall()
+
+    def update_crm_watch(self, order_no: str, user_id: int, status: str | None) -> None:
+        """status=None — больше не следим (выдано, давно, клиент заблокировал бота)."""
+        with self.conn:
+            if status is None:
+                self.conn.execute("DELETE FROM crm_watch WHERE order_no = ? AND user_id = ?", (order_no, user_id))
+            else:
+                self.conn.execute("UPDATE crm_watch SET last_status = ? WHERE order_no = ? AND user_id = ?",
+                                  (status, order_no, user_id))
 
     def recent_repairs(self, limit: int = 15) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM repairs ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()

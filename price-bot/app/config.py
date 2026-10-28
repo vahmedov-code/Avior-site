@@ -57,6 +57,8 @@ class Config:
     default_only_words: tuple[tuple[str, str], ...] = (("Пылесосы", "dyson"),)
     used_note: str = DEFAULT_USED_NOTE
     services: tuple[str, ...] = tuple(DEFAULT_SERVICES.split(","))
+    crm_api_url: str = "https://cms.avior.moscow/api"
+    crm_lead_secret: str = ""
 
     @classmethod
     def from_env(cls, for_bot: bool = True) -> "Config":
@@ -85,6 +87,8 @@ class Config:
                 o.strip() for o in os.getenv("DELIVERY_OPTIONS", DEFAULT_DELIVERY).split(",") if o.strip()
             ),
             used_note=_text("USED_NOTE", DEFAULT_USED_NOTE),
+            crm_api_url=os.getenv("CRM_API_URL", "https://cms.avior.moscow/api").rstrip("/"),
+            crm_lead_secret=os.getenv("CRM_LEAD_SECRET", "").strip(),
             services=tuple(x.strip() for x in os.getenv("SERVICES", DEFAULT_SERVICES).split(",") if x.strip()),
             accessory_markup_fixed=int(os.getenv("ACCESSORY_MARKUP", "5000")),
             accessory_words=_words("ACCESSORY_WORDS", DEFAULT_ACCESSORY_WORDS),

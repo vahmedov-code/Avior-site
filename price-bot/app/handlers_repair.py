@@ -1,9 +1,13 @@
-"""Ремонт: запись клиента и статус по номеру квитанции.
+"""Ремонт: запись клиента и статус заказа.
 
-Статус ставит владелец командой /repair; клиент, который хоть раз проверил статус,
-получает уведомление при каждом его изменении."""
+Запись уходит в CRM сервиса (как заявки с сайта) и владельцу в Telegram. Статус берётся из CRM
+по номеру заказа и телефону; бот периодически проверяет его и сообщает клиенту об изменениях.
+Для заказов, которых нет в CRM, владелец может поставить статус вручную командой /repair."""
+import asyncio
 import html
+import logging
 import re
+import time
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
@@ -17,6 +21,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from . import keyboards as kb
 from .config import Config
+from .crm import CrmUnavailable, order_status, send_lead
 from .db import DB
 from .handlers_admin import IsAdmin
 from .handlers_used import buttons
@@ -27,6 +32,10 @@ admin_router = Router(name="repair_admin")
 admin_router.message.filter(IsAdmin())
 admin_router.callback_query.filter(IsAdmin())
 
+log = logging.getLogger(__name__)
+CRM_POLL = 20 * 60          # как часто проверять статусы в CRM, секунд
+CRM_WATCH_DAYS = 60         # дольше не следим за заказом
+DONE_WORDS = ("выдан", "закрыт", "отказ")  # после такого статуса следить больше не нужно
 STATUSES = ("🔍 Диагностика", "⏳ Ждём запчасть", "🛠 В ремонте", "✅ Готово — можно забирать", "📦 Выдано")
 NUMBER_RE = re.compile(r"[\w-]{1,20}")
 
@@ -39,6 +48,15 @@ class RepairBook(StatesGroup):
 
 class RepairStatus(StatesGroup):
     number = State()
+    phone = State()
+
+
+def contact_phone(message: Message) -> str:
+    """Номер из кнопки «Отправить контакт» Telegram присылает без «+» — приводим к виду +7…"""
+    if message.contact:
+        phone = message.contact.phone_number
+        return phone if phone.startswith("+") else f"+{phone}"
+    return message.text.strip()
 
 
 def clean_number(text: str) -> str | None:
@@ -88,21 +106,26 @@ async def on_problem(message: Message, state: FSMContext):
 @router.message(StateFilter(RepairBook.phone), F.text == "Отмена")
 async def on_book_cancel(message: Message, state: FSMContext, db: DB, cfg: Config):
     await state.clear()
-    await message.answer("Запись отменена.", reply_markup=ReplyKeyboardRemove())
+    await message.answer("Отменено.", reply_markup=ReplyKeyboardRemove())
     await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))
 
 
 @router.message(StateFilter(RepairBook.phone), F.contact | F.text)
 async def on_book_phone(message: Message, state: FSMContext, bot: Bot, db: DB, cfg: Config):
-    phone = message.contact.phone_number if message.contact else message.text.strip()
+    phone = contact_phone(message)
     if len(re.sub(r"\D", "", phone)) < 10:
         await message.answer("Не похоже на номер телефона. Пример: +7 900 123-45-67", reply_markup=kb.phone_request())
         return
     d = await state.get_data()
     await state.clear()
-    await notify_admins(bot, cfg, f"🔧 <b>Запись на ремонт</b>\n👤 {user_link(message.from_user)}\n"
+    user = message.from_user
+    tg = f", @{user.username}" if user.username else ""
+    error = await send_lead(cfg, user.full_name, phone,
+                            f"{d['device']}: {d['problem']}\n(заявка из Telegram-бота{tg})")
+    crm = "✅ записана в CRM" if error is None else f"⚠️ в CRM не попала: {html.escape(error)}"
+    await notify_admins(bot, cfg, f"🔧 <b>Запись на ремонт</b>\n👤 {user_link(user)}\n"
                                   f"📱 {html.escape(phone)}\n\n<b>{html.escape(d['device'])}</b>\n"
-                                  f"{html.escape(d['problem'])}")
+                                  f"{html.escape(d['problem'])}\n\n{crm}")
     await message.answer("✅ Заявка принята! Мастер перезвонит, подскажет цену и сроки.\n"
                          "📍 Москва, Можайское ш., 4к1", reply_markup=ReplyKeyboardRemove())
     await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))
@@ -120,26 +143,91 @@ def status_text(cfg: Config, row) -> str:
 @router.callback_query(F.data == "rpstatus")
 async def cb_status(call: CallbackQuery, state: FSMContext):
     await state.set_state(RepairStatus.number)
-    await call.message.answer("Напишите номер квитанции, например <code>1234</code>.", reply_markup=kb.cancel_lead())
+    await call.message.answer("Напишите номер заказа (он есть в квитанции), например <code>1234</code>.",
+                              reply_markup=kb.cancel_lead())
     await call.answer()
 
 
 @router.message(StateFilter(RepairStatus.number), F.text, ~F.text.startswith("/"))
-async def on_status_number(message: Message, state: FSMContext, db: DB, cfg: Config):
+async def on_status_number(message: Message, state: FSMContext):
     number = clean_number(message.text)
     if not number:
-        await message.answer("Номер квитанции — это цифры, например <code>1234</code>.", reply_markup=kb.cancel_lead())
+        await message.answer("Номер заказа — это цифры, например <code>1234</code>.", reply_markup=kb.cancel_lead())
         return
+    await state.update_data(number=number)
+    await state.set_state(RepairStatus.phone)
+    await message.answer("И номер телефона, который вы оставили при сдаче устройства — кнопкой ниже или сообщением.",
+                         reply_markup=kb.phone_request())
+
+
+def crm_text(found: dict) -> str:
+    device = f" · {html.escape(found['device'])}" if found["device"] else ""
+    return f"🔧 <b>Заказ №{html.escape(found['order_no'])}</b>{device}\n\nСтатус: <b>{html.escape(found['status'])}</b>"
+
+
+@router.message(StateFilter(RepairStatus.phone), F.text == "Отмена")
+async def on_status_cancel(message: Message, state: FSMContext, db: DB, cfg: Config):
+    await on_book_cancel(message, state, db, cfg)
+
+
+@router.message(StateFilter(RepairStatus.phone), F.contact | F.text)
+async def on_status_phone(message: Message, state: FSMContext, db: DB, cfg: Config):
+    phone = contact_phone(message)
+    if len(re.sub(r"\D", "", phone)) < 10:
+        await message.answer("Не похоже на номер телефона. Пример: +7 900 123-45-67", reply_markup=kb.phone_request())
+        return
+    number = (await state.get_data())["number"]
     await state.clear()
-    row = db.repair(number)
-    if not row:
-        await message.answer(f"По квитанции №{html.escape(number)} пока нет информации. Проверьте номер или "
-                             "напишите нам — подскажем.", reply_markup=buttons([("💬 Задать вопрос", "lead")],
-                                                                              [("🏠 В меню", "home")]))
+    await message.answer("Проверяю…", reply_markup=ReplyKeyboardRemove())
+    try:
+        found = await order_status(cfg, number, phone)
+    except CrmUnavailable as e:
+        log.warning("CRM: статус не получен: %s", e)
+        found, crm_down = None, True
+    else:
+        crm_down = False
+    if found:
+        db.watch_crm(found["order_no"], phone, message.from_user.id, found["status"])
+        await message.answer(crm_text(found) + "\n\n🔔 Сообщим сюда, когда статус изменится.",
+                             reply_markup=kb.back_home())
         return
-    db.watch_repair(number, message.from_user.id)
-    await message.answer(status_text(cfg, row) + "\n\n🔔 Сообщим сюда, когда статус изменится.",
-                         reply_markup=kb.back_home())
+    row = db.repair(number)  # статус, поставленный вручную командой /repair
+    if row:
+        db.watch_repair(number, message.from_user.id)
+        await message.answer(status_text(cfg, row) + "\n\n🔔 Сообщим сюда, когда статус изменится.",
+                             reply_markup=kb.back_home())
+        return
+    text = ("Не удалось связаться с системой заказов — попробуйте чуть позже." if crm_down else
+            f"Заказ №{html.escape(number)} с этим телефоном не найден. Проверьте номер заказа и телефон.")
+    await message.answer(text, reply_markup=buttons([("🔎 Попробовать ещё раз", "rpstatus")],
+                                                    [("💬 Задать вопрос", "lead")], [("🏠 В меню", "home")]))
+
+
+async def crm_status_poller(bot: Bot, db: DB, cfg: Config) -> None:
+    """Фоновая задача бота: раз в 20 минут сверяет статусы заказов, за которыми следят клиенты."""
+    while True:
+        await asyncio.sleep(CRM_POLL)
+        for w in db.crm_watches():
+            if time.time() - w["created_at"] > CRM_WATCH_DAYS * 86400:
+                db.update_crm_watch(w["order_no"], w["user_id"], None)
+                continue
+            try:
+                found = await order_status(cfg, w["order_no"], w["phone"])
+            except CrmUnavailable:
+                break  # CRM недоступна — попробуем в следующий раз
+            except Exception:
+                log.exception("CRM: ошибка проверки статуса")
+                break
+            if not found or found["status"] == w["last_status"]:
+                continue
+            done = any(word in found["status"].lower() for word in DONE_WORDS)
+            try:
+                await bot.send_message(w["user_id"], "🔔 Обновился статус ремонта\n\n" + crm_text(found),
+                                       reply_markup=kb.back_home())
+            except (TelegramBadRequest, TelegramForbiddenError):
+                done = True  # клиент заблокировал бота
+            db.update_crm_watch(w["order_no"], w["user_id"], None if done else found["status"])
+            await asyncio.sleep(1)  # не нагружаем CRM
 
 
 # --- владелец: статусы ---
@@ -174,7 +262,9 @@ async def cmd_repair(message: Message, command: CommandObject, bot: Bot, db: DB,
         lines = ["<b>Статусы ремонта</b>",
                  "/repair 1234 — выбрать статус кнопкой",
                  "/repair 1234 Ждём дисплей до пятницы — свой текст",
-                 "/repair 1234 iPhone 13 | Диагностика — с названием устройства", ""]
+                 "/repair 1234 iPhone 13 | Диагностика — с названием устройства",
+                 "<i>Заказы из CRM клиенты видят сами (номер заказа + телефон) — /repair нужен только "
+                 "для того, чего нет в CRM.</i>", ""]
         for r in db.recent_repairs():
             lines.append(f"№{html.escape(r['number'])} {html.escape(r['device'])} — {html.escape(r['status'])}")
         await message.answer("\n".join(lines))

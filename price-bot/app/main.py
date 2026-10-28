@@ -105,8 +105,10 @@ async def main() -> None:
 
     # Меню команд ставим в фоне: временный сбой Telegram («Bad Gateway») не должен ронять бота
     menus = asyncio.create_task(set_menus(bot, cfg))  # ссылку держим, чтобы задачу не собрал сборщик мусора
+    crm = asyncio.create_task(handlers_repair.crm_status_poller(bot, db, cfg))
     await dp.start_polling(bot)
     menus.cancel()
+    crm.cancel()
 
 
 if __name__ == "__main__":

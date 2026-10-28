@@ -596,3 +596,47 @@ def test_repair_status_watchers_and_order_services():
     assert has_device(lines)
     order_id = db.create_order(5, "К", None, "+79000000000", "Курьер", lines, ["🛡 Наклейка стекла"])
     assert "🛡 Наклейка стекла" in render_order_for_admin(db, db.order(order_id))
+
+
+def test_crm_lead_and_status():
+    import asyncio
+    from dataclasses import replace
+    from aiohttp import web
+    from app.config import Config
+    from app.crm import order_status, send_lead
+
+    leads = []
+
+    async def intake(request):
+        if request.headers.get("X-Lead-Secret") != "s3cret":
+            return web.json_response({"ok": False}, status=403)
+        leads.append(await request.json())
+        return web.json_response({"ok": True})
+
+    async def status(request):
+        q = request.query
+        if q["order_no"] == "1234" and "".join(filter(str.isdigit, q["phone"])).endswith("9001234567"):
+            return web.json_response({"found": True, "order_no": "1234", "device": "iPhone 13", "status": "В ремонте"})
+        return web.json_response({"found": False})
+
+    async def run():
+        app = web.Application()
+        app.router.add_post("/api/lead_intake.php", intake)
+        app.router.add_get("/api/status.php", status)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        port = site._server.sockets[0].getsockname()[1]
+        cfg = replace(Config.from_env(for_bot=False), crm_api_url=f"http://127.0.0.1:{port}/api", crm_lead_secret="s3cret")
+        try:
+            assert await send_lead(cfg, "Иван", "+79001234567", "iPhone 13: разбит экран") is None
+            assert "403" in await send_lead(replace(cfg, crm_lead_secret="wrong"), "И", "+7900", "x")
+            assert await order_status(cfg, "1234", "+7 900 123-45-67") == {
+                "order_no": "1234", "device": "iPhone 13", "status": "В ремонте"}
+            assert await order_status(cfg, "9999", "+79001234567") is None
+        finally:
+            await runner.cleanup()
+
+    asyncio.run(run())
+    assert leads == [{"name": "Иван", "phone": "+79001234567", "text": "iPhone 13: разбит экран", "channel": "telegram"}]
