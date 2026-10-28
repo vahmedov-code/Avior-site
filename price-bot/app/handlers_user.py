@@ -27,13 +27,24 @@ class Lead(StatesGroup):
 
 class Checkout(StatesGroup):
     delivery = State()
+    services = State()
     phone = State()
+
+
+# Если в корзине устройство — предлагаем услуги сервиса (стекло, перенос данных)
+DEVICE_WORDS = ("iphone", "смартфон", "samsung", "galaxy", "pixel", "xiaomi", "redmi", "honor", "huawei",
+                "ipad", "планшет", "macbook", "ноутбук", "б/у")
+
+
+def has_device(lines: list[CartLine]) -> bool:
+    return any(w in f"{line.path} {line.label}".lower() for line in lines if line.available for w in DEVICE_WORDS)
 
 
 def welcome(cfg: Config) -> str:
     return (
         f"👋 Добро пожаловать в <b>{html.escape(cfg.shop_name)}</b>!\n\n"
-        f"{html.escape(cfg.welcome_text)}\n\nВыберите категорию:"
+        f"{html.escape(cfg.welcome_text)}\n\n"
+        "🔍 Чтобы найти товар, просто напишите модель, например: <code>15 Pro 256</code>\n\nИли выберите категорию:"
     )
 
 
@@ -205,7 +216,8 @@ def render_cart(lines: list[CartLine]) -> str:
                 out.append(f"    <i>{html.escape(line.path)}</i>")
         else:
             out.append(f"{no}. <s>{html.escape(line.label)}</s> — ⚠️ закончился")
-    out += ["", f"<b>Итого: {fmt_price(total)}</b>", "", "❌ с номером — убрать товар."]
+    out += ["", f"<b>Итого: {fmt_price(total)}</b>", "", "❌ с номером — убрать товар.",
+            "🔔 Если товары из корзины подешевеют, мы сообщим."]
     return "\n".join(out)
 
 
@@ -247,19 +259,48 @@ async def cb_checkout(call: CallbackQuery, state: FSMContext, db: DB, cfg: Confi
 
 
 @router.callback_query(StateFilter(Checkout.delivery), F.data.startswith("d:"))
-async def cb_delivery(call: CallbackQuery, state: FSMContext, cfg: Config):
+async def cb_delivery(call: CallbackQuery, state: FSMContext, db: DB, cfg: Config):
     idx = int(call.data.split(":")[1])
     if idx >= len(cfg.delivery_options):
         await call.answer()
         return
-    await state.update_data(delivery=cfg.delivery_options[idx])
-    await state.set_state(Checkout.phone)
+    await state.update_data(delivery=cfg.delivery_options[idx], services=[])
     await call.message.edit_reply_markup(reply_markup=None)
-    await call.message.answer(
-        f"Доставка: {html.escape(cfg.delivery_options[idx])}\n\n"
+    if cfg.services and has_device(db.cart_lines(call.from_user.id)):
+        await state.set_state(Checkout.services)
+        await call.message.answer(
+            "🔧 <b>Услуги сервиса AVIOR к покупке</b>\nОтметьте, что нужно, — мастер сделает при выдаче. "
+            "Стоимость менеджер скажет при подтверждении заказа.",
+            reply_markup=kb.services_menu(cfg.services, set()),
+        )
+    else:
+        await ask_phone(call.message, state, cfg.delivery_options[idx])
+    await call.answer()
+
+
+async def ask_phone(message: Message, state: FSMContext, delivery: str) -> None:
+    await state.set_state(Checkout.phone)
+    await message.answer(
+        f"Доставка: {html.escape(delivery)}\n\n"
         "Отправьте номер телефона кнопкой ниже или напишите его сообщением.",
         reply_markup=kb.phone_request(),
     )
+
+
+@router.callback_query(StateFilter(Checkout.services), F.data.startswith("sv:"))
+async def cb_service_toggle(call: CallbackQuery, state: FSMContext, cfg: Config):
+    idx = int(call.data.split(":")[1])
+    chosen = set((await state.get_data()).get("services", []))
+    chosen ^= {idx}
+    await state.update_data(services=sorted(chosen))
+    await call.message.edit_reply_markup(reply_markup=kb.services_menu(cfg.services, chosen))
+    await call.answer()
+
+
+@router.callback_query(StateFilter(Checkout.services), F.data == "svdone")
+async def cb_services_done(call: CallbackQuery, state: FSMContext):
+    await call.message.edit_reply_markup(reply_markup=None)
+    await ask_phone(call.message, state, (await state.get_data())["delivery"])
     await call.answer()
 
 
@@ -285,14 +326,17 @@ async def checkout_phone(message: Message, state: FSMContext, bot: Bot, db: DB, 
         await message.answer("Корзина пуста — товары закончились.", reply_markup=ReplyKeyboardRemove())
         return
 
-    order_id = db.create_order(user.id, user.full_name, user.username, phone, data["delivery"], lines)
+    services = [cfg.services[i] for i in data.get("services", []) if i < len(cfg.services)]
+    order_id = db.create_order(user.id, user.full_name, user.username, phone, data["delivery"], lines, services)
     await state.clear()
 
     order = db.order(order_id)
     await notify_admins(bot, cfg, render_order_for_admin(db, order), kb.order_actions(order_id))
     await message.answer(
         f"✅ <b>Заказ №{order_id} оформлен!</b>\n\nСумма: {fmt_price(order['total'])}\n"
-        f"Получение: {html.escape(order['delivery'])}\n\nМы скоро свяжемся с вами для подтверждения.",
+        f"Получение: {html.escape(order['delivery'])}\n"
+        + (f"Услуги: {html.escape(', '.join(services))}\n" if services else "")
+        + "\nМы скоро свяжемся с вами для подтверждения.",
         reply_markup=ReplyKeyboardRemove(),
     )
     await message.answer(welcome(cfg), reply_markup=main_menu(db, user.id, cfg))
@@ -318,6 +362,8 @@ def render_order_for_admin(db: DB, order) -> str:
         out.append(f"{no}. {html.escape(it['name'])} — {qty}{fmt_price(it['price'])}{cost}")
         if it.get("path"):
             out.append(f"    📂 {html.escape(it['path'])}")
+    if order["services"]:
+        out += ["", "🔧 <b>Услуги</b> (цену согласовать):", *[f"• {html.escape(x)}" for x in order["services"].split("\n")]]
     out += [
         "",
         f"<b>Итого: {fmt_price(order['total'])}</b>",

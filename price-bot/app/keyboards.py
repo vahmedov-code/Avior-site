@@ -44,6 +44,9 @@ def main_menu(categories, cart_count: int = 0, show_used: bool = False) -> Inlin
     if show_used:  # раздел б/у — такая же кнопка каталога, последней
         kb.button(text="♻️ Б/у (проверено)", callback_data="bu")
     kb.adjust(2)
+    kb.row(InlineKeyboardButton(text="🔍 Поиск", callback_data="find"),
+           InlineKeyboardButton(text="🔧 Ремонт", callback_data="repair"))
+    kb.row(InlineKeyboardButton(text="💰 Сдать устройство в трейд-ин", callback_data="ti"))
     if cart_count:
         kb.row(cart_button(cart_count))
     kb.row(BTN_QUESTION)
@@ -99,6 +102,15 @@ def delivery_menu(options: tuple[str, ...]) -> InlineKeyboardMarkup:
         kb.button(text=title, callback_data=f"d:{idx}")
     kb.adjust(1)
     kb.row(InlineKeyboardButton(text="⬅️ В корзину", callback_data="cart"))
+    return kb.as_markup()
+
+
+def services_menu(services: tuple[str, ...], chosen: set[int]) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    for idx, title in enumerate(services):
+        kb.button(text=("✅ " if idx in chosen else "☐ ") + title, callback_data=f"sv:{idx}")
+    kb.adjust(1)
+    kb.row(InlineKeyboardButton(text="Далее →" if chosen else "Не нужно, далее →", callback_data="svdone"))
     return kb.as_markup()
 
 

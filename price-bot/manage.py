@@ -116,23 +116,25 @@ def cmd_import_collected(args, cfg: Config) -> None:
     from aiogram.enums import ParseMode
     from aiogram.types import BufferedInputFile
 
+    from app.alerts import send_price_alerts
     from app.collected_import import handle
 
     bot_cfg = Config.from_env()
     with open(args.file, encoding="utf-8") as f:
         text, photo = handle(bot_db(bot_cfg), bot_cfg, json.load(f), args.report)
     print(text or "Изменений нет.")
-    if not text:
-        return
 
     async def send():
         bot = Bot(bot_cfg.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
         try:
-            for admin_id in bot_cfg.admin_ids:
+            for admin_id in bot_cfg.admin_ids if text else ():
                 if photo:
                     await bot.send_photo(admin_id, BufferedInputFile(photo, "screen.png"), caption=text[:1000])
                 else:
                     await bot.send_message(admin_id, text)
+            # клиентам — что из их корзины подешевело или снова появилось
+            sent = await send_price_alerts(bot, bot_db(bot_cfg))
+            print(f"Уведомлений о ценах: {sent}")
         finally:
             await bot.session.close()
 

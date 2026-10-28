@@ -92,7 +92,45 @@ CREATE TABLE IF NOT EXISTS used_items (
     status     TEXT NOT NULL DEFAULT 'active',
     created_at INTEGER NOT NULL
 );
+-- Заявки клиентов «сдать устройство в трейд-ин»
+CREATE TABLE IF NOT EXISTS tradein (
+    id         INTEGER PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    user_name  TEXT NOT NULL,
+    username   TEXT,
+    model      TEXT NOT NULL,
+    battery    TEXT NOT NULL DEFAULT '',
+    condition  TEXT NOT NULL DEFAULT '',
+    photos     TEXT NOT NULL DEFAULT '[]',
+    phone      TEXT NOT NULL,
+    offer      TEXT,
+    status     TEXT NOT NULL DEFAULT 'new',
+    created_at INTEGER NOT NULL
+);
+-- Статус ремонта по номеру квитанции; кто проверял статус — получает уведомления об изменениях
+CREATE TABLE IF NOT EXISTS repairs (
+    number     TEXT PRIMARY KEY,
+    device     TEXT NOT NULL DEFAULT '',
+    status     TEXT NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS repair_watch (
+    number  TEXT NOT NULL,
+    user_id INTEGER NOT NULL,
+    PRIMARY KEY (number, user_id)
+);
 """
+
+# Колонки, добавленные после первых версий бота: (таблица, колонка, определение)
+MIGRATIONS = (
+    ("cart", "used_id", "INTEGER"),
+    ("cart", "seen_price", "INTEGER"),   # цена, о которой клиент уже знает (для уведомлений о снижении)
+    ("cart", "seen_avail", "INTEGER"),   # 0 — товар пропадал из прайса
+    ("visitors", "news_off", "INTEGER NOT NULL DEFAULT 0"),
+    ("visitors", "alerts_off", "INTEGER NOT NULL DEFAULT 0"),
+    ("orders", "services", "TEXT NOT NULL DEFAULT ''"),
+    ("used_items", "channel_msg_id", "INTEGER"),
+)
 
 USED_LABEL = "♻️ Б/у"
 
@@ -143,9 +181,9 @@ class DB:
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.executescript(SCHEMA)
-        # корзина из версии без б/у: добавляем ссылку на устройство
-        if "used_id" not in {r["name"] for r in self.conn.execute("PRAGMA table_info(cart)")}:
-            self.conn.execute("ALTER TABLE cart ADD COLUMN used_id INTEGER")
+        for table, column, definition in MIGRATIONS:
+            if column not in {r["name"] for r in self.conn.execute(f"PRAGMA table_info({table})")}:
+                self.conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     # --- настройки ---
     def get_setting(self, key: str, default: str | None = None) -> str | None:
@@ -302,49 +340,82 @@ class DB:
     def add_to_cart(self, user_id: int, item: sqlite3.Row) -> None:
         with self.conn:
             self.conn.execute(
-                "INSERT INTO cart(user_id, category_id, section, name, note) VALUES(?, ?, ?, ?, ?) "
+                "INSERT INTO cart(user_id, category_id, section, name, note, seen_price, seen_avail) "
+                "VALUES(?, ?, ?, ?, ?, ?, 1) "
                 "ON CONFLICT(user_id, category_id, section, name, note) DO UPDATE SET qty = qty + 1",
-                (user_id, item["category_id"], item["section"], item["name"], item["note"]),
+                (user_id, item["category_id"], item["section"], item["name"], item["note"], self.sell_price(item)),
             )
+
+    def price_alerts(self) -> dict[int, list[tuple[str, int | None, int, str]]]:
+        """После обновления прайса: что в корзинах подешевело или снова появилось.
+        Возвращает {user_id: [(название, было или None — «снова в наличии», стало, путь)]}
+        и запоминает новые цены, чтобы не сообщать об одном и том же дважды."""
+        alerts: dict[int, list] = {}
+        muted = {r[0] for r in self.conn.execute("SELECT user_id FROM visitors WHERE alerts_off = 1")}
+        with self.conn:
+            for line, row in self._cart_rows_all():
+                if line.used_id is not None:
+                    continue
+                seen, avail = row["seen_price"], row["seen_avail"]
+                if line.price is None:
+                    if avail != 0:
+                        self.conn.execute("UPDATE cart SET seen_avail = 0 WHERE id = ?", (line.cart_id,))
+                    continue
+                if seen is not None and row["user_id"] not in muted:
+                    if avail == 0:
+                        alerts.setdefault(row["user_id"], []).append((line.label, None, line.price, line.path))
+                    elif line.price < seen:
+                        alerts.setdefault(row["user_id"], []).append((line.label, seen, line.price, line.path))
+                if seen != line.price or avail != 1:
+                    self.conn.execute("UPDATE cart SET seen_price = ?, seen_avail = 1 WHERE id = ?",
+                                      (line.price, line.cart_id))
+        return alerts
+
+    def set_alerts_off(self, user_id: int, off: bool = True) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE visitors SET alerts_off = ? WHERE user_id = ?", (int(off), user_id))
 
     def cart_count(self, user_id: int) -> int:
         return self.conn.execute("SELECT COALESCE(SUM(qty), 0) FROM cart WHERE user_id = ?", (user_id,)).fetchone()[0]
 
+    _CART_SQL = (
+        "SELECT c.*, i.base_price, cat.title AS cat_title, cat.markup_pct, cat.markup_fixed, "
+        "u.price AS used_price, u.cost AS used_cost "
+        "FROM cart c "
+        "LEFT JOIN used_items u ON u.id = c.used_id AND u.status = 'active' "
+        "LEFT JOIN categories cat ON cat.id = c.category_id "
+        # без раздела: переименованный поставщиком раздел не должен «терять» товар в корзине
+        "LEFT JOIN items i ON i.category_id = c.category_id "
+        "  AND i.name = c.name AND i.note = c.note "
+    )
+
+    def _cart_line(self, r: sqlite3.Row) -> CartLine:
+        price = cost = None
+        if r["used_id"] is not None:
+            if r["used_price"] is not None:
+                price, cost = r["used_price"], r["used_cost"]
+        elif r["base_price"] is not None:
+            cost = r["base_price"]
+            price = apply_markup(cost, *self.markup(r))
+        return CartLine(
+            cart_id=r["id"],
+            label=_item_label(r["section"], r["name"], r["note"]),
+            category=USED_LABEL if r["used_id"] is not None else (r["cat_title"] or ""),
+            section=r["section"],
+            qty=r["qty"],
+            price=price,
+            cost=cost,
+            used_id=r["used_id"],
+        )
+
     def cart_lines(self, user_id: int) -> list[CartLine]:
-        rows = self.conn.execute(
-            "SELECT c.*, i.base_price, cat.title AS cat_title, cat.markup_pct, cat.markup_fixed, "
-            "u.price AS used_price, u.cost AS used_cost "
-            "FROM cart c "
-            "LEFT JOIN used_items u ON u.id = c.used_id AND u.status = 'active' "
-            "LEFT JOIN categories cat ON cat.id = c.category_id "
-            # без раздела: переименованный поставщиком раздел не должен «терять» товар в корзине
-            "LEFT JOIN items i ON i.category_id = c.category_id "
-            "  AND i.name = c.name AND i.note = c.note "
-            "WHERE c.user_id = ? GROUP BY c.id ORDER BY c.id",
-            (user_id,),
-        ).fetchall()
-        lines = []
-        for r in rows:
-            price = cost = None
-            if r["used_id"] is not None:
-                if r["used_price"] is not None:
-                    price, cost = r["used_price"], r["used_cost"]
-            elif r["base_price"] is not None:
-                cost = r["base_price"]
-                price = apply_markup(cost, *self.markup(r))
-            lines.append(
-                CartLine(
-                    cart_id=r["id"],
-                    label=_item_label(r["section"], r["name"], r["note"]),
-                    category=USED_LABEL if r["used_id"] is not None else (r["cat_title"] or ""),
-                    section=r["section"],
-                    qty=r["qty"],
-                    price=price,
-                    cost=cost,
-                    used_id=r["used_id"],
-                )
-            )
-        return lines
+        rows = self.conn.execute(self._CART_SQL + "WHERE c.user_id = ? GROUP BY c.id ORDER BY c.id",
+                                 (user_id,)).fetchall()
+        return [self._cart_line(r) for r in rows]
+
+    def _cart_rows_all(self) -> list[tuple[CartLine, sqlite3.Row]]:
+        rows = self.conn.execute(self._CART_SQL + "GROUP BY c.id ORDER BY c.id").fetchall()
+        return [(self._cart_line(r), r) for r in rows]
 
     def remove_cart_line(self, user_id: int, cart_id: int) -> None:
         with self.conn:
@@ -356,7 +427,7 @@ class DB:
 
     # --- заказы ---
     def create_order(self, user_id: int, user_name: str, username: str | None, phone: str, delivery: str,
-                     lines: list[CartLine]) -> int:
+                     lines: list[CartLine], services: list[str] = ()) -> int:
         items = [
             {"name": l.label, "qty": l.qty, "price": l.price, "cost": l.cost, "path": l.path}
             | ({"used_id": l.used_id} if l.used_id is not None else {})
@@ -367,10 +438,10 @@ class DB:
         cost = sum(i["qty"] * (i["price"] if i["cost"] is None else i["cost"]) for i in items)
         with self.conn:
             cur = self.conn.execute(
-                "INSERT INTO orders(user_id, user_name, username, phone, delivery, items, total, cost, created_at) "
-                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO orders(user_id, user_name, username, phone, delivery, items, total, cost, services, "
+                "created_at) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (user_id, user_name, username, phone, delivery, json.dumps(items, ensure_ascii=False), total, cost,
-                 int(time.time())),
+                 "\n".join(services), int(time.time())),
             )
             self.conn.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
             # б/у устройство в одном экземпляре: пока заказ не подтверждён или не отменён, его не видно на витрине
@@ -455,6 +526,61 @@ class DB:
                 "INSERT OR IGNORE INTO cart(user_id, category_id, section, name, note, used_id) VALUES(?, 0, ?, ?, ?, ?)",
                 (user_id, row["kind"], row["model"], f"б/у №{row['id']}", row["id"]),
             )
+
+    def set_used_channel_msg(self, used_id: int, msg_id: int | None) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE used_items SET channel_msg_id = ? WHERE id = ?", (msg_id, used_id))
+
+    # --- трейд-ин от клиентов ---
+    def add_tradein(self, user_id: int, user_name: str, username: str | None, model: str, battery: str,
+                    condition: str, photos: list[str], phone: str) -> int:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO tradein(user_id, user_name, username, model, battery, condition, photos, phone, created_at) "
+                "VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (user_id, user_name, username, model, battery, condition, json.dumps(photos), phone, int(time.time())),
+            )
+        return cur.lastrowid
+
+    def tradein(self, req_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM tradein WHERE id = ?", (req_id,)).fetchone()
+
+    def set_tradein(self, req_id: int, status: str, offer: str | None = None) -> None:
+        with self.conn:
+            if offer is None:
+                self.conn.execute("UPDATE tradein SET status = ? WHERE id = ?", (status, req_id))
+            else:
+                self.conn.execute("UPDATE tradein SET status = ?, offer = ? WHERE id = ?", (status, offer, req_id))
+
+    # --- статус ремонта ---
+    def repair(self, number: str) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM repairs WHERE number = ?", (number,)).fetchone()
+
+    def set_repair(self, number: str, status: str, device: str | None = None) -> list[int]:
+        """Сохраняет статус и возвращает, кому о нём сообщить."""
+        with self.conn:
+            self.conn.execute(
+                "INSERT INTO repairs(number, device, status, updated_at) VALUES(?, COALESCE(?, ''), ?, ?) "
+                "ON CONFLICT(number) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at, "
+                "device = COALESCE(?, repairs.device)",
+                (number, device, status, int(time.time()), device),
+            )
+        return [r[0] for r in self.conn.execute("SELECT user_id FROM repair_watch WHERE number = ?", (number,))]
+
+    def watch_repair(self, number: str, user_id: int) -> None:
+        with self.conn:
+            self.conn.execute("INSERT OR IGNORE INTO repair_watch(number, user_id) VALUES(?, ?)", (number, user_id))
+
+    def recent_repairs(self, limit: int = 15) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM repairs ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()
+
+    # --- рассылка ---
+    def news_recipients(self) -> list[int]:
+        return [r[0] for r in self.conn.execute("SELECT user_id FROM visitors WHERE news_off = 0")]
+
+    def set_news_off(self, user_id: int, off: bool = True) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE visitors SET news_off = ? WHERE user_id = ?", (int(off), user_id))
 
     # --- статистика ---
     def track_visit(self, user_id: int, username: str | None, full_name: str, day: str) -> None:

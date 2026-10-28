@@ -537,3 +537,62 @@ def test_long_section_pages_fit_telegram_limit():
             break
         page += 1
     assert seen == [f"➕{n}" for n in range(1, 61)]  # каждый товар ровно на одной странице
+
+
+def _shop():
+    from app.parser import Section
+    db = DB(":memory:")
+    db.set_setting("markup_pct", 0)
+    db.set_setting("markup_fixed", 0)
+    c = db.add_category("iPhone 15 Pro")
+    db.replace_items(c, [Section("iPhone 15 Pro", [Item("15 Pro 256Gb Black", 100000, "🇺🇸"),
+                                                    Item("15 Pro Max 512Gb", 130000, "")])])
+    return db, c
+
+
+def test_search_understands_russian_spelling():
+    from app.search import search, tokens
+    assert tokens("Айфон15Про 256ГБ") == ["iphone", "15", "pro", "256", "gb"]
+    db, _ = _shop()
+    hits, total = search(db, "айфон 15 про 256")
+    assert total == 1 and hits[0].label == "15 Pro 256Gb Black 🇺🇸" and hits[0].price == 100000
+    db.add_used("Смартфоны", "iPhone 15 Pro 256GB", "91%", "Отличное", "", 80000, None, ["f"])
+    hits, _ = search(db, "15 pro 256 бу")
+    assert [h.kind for h in hits] == ["used"]
+    assert search(db, "samsung")[1] == 0
+
+
+def test_price_alerts_for_cart():
+    from app.parser import Section
+    db, c = _shop()
+    item = db.items(c)[0]
+    db.add_to_cart(7, item)
+    assert db.price_alerts() == {}  # ничего не поменялось
+    db.replace_items(c, [Section("iPhone 15 Pro", [Item("15 Pro 256Gb Black", 95000, "🇺🇸")])])
+    assert db.price_alerts() == {7: [("15 Pro 256Gb Black 🇺🇸", 100000, 95000, "iPhone 15 Pro")]}
+    assert db.price_alerts() == {}  # второй раз о том же не пишем
+    db.replace_items(c, [])  # товар пропал…
+    assert db.price_alerts() == {}
+    db.replace_items(c, [Section("iPhone 15 Pro", [Item("15 Pro 256Gb Black", 97000, "🇺🇸")])])
+    assert db.price_alerts() == {7: [("15 Pro 256Gb Black 🇺🇸", None, 97000, "iPhone 15 Pro")]}  # …и вернулся
+    db.track_visit(7, None, "Клиент", "2026-10-28")
+    db.set_alerts_off(7)
+    db.replace_items(c, [Section("iPhone 15 Pro", [Item("15 Pro 256Gb Black", 90000, "🇺🇸")])])
+    assert db.price_alerts() == {}  # отписался
+
+
+def test_repair_status_watchers_and_order_services():
+    from app.handlers_repair import clean_number
+    from app.handlers_user import has_device, render_order_for_admin
+    db, c = _shop()
+    assert clean_number("№ 1234") == "1234" and clean_number("12 34") is None
+    assert db.set_repair("1234", "Диагностика", "MacBook Air") == []
+    db.watch_repair("1234", 5)
+    assert db.set_repair("1234", "Готово") == [5]
+    assert db.repair("1234")["device"] == "MacBook Air"  # устройство не затирается при смене статуса
+
+    db.add_to_cart(5, db.items(c)[0])
+    lines = db.cart_lines(5)
+    assert has_device(lines)
+    order_id = db.create_order(5, "К", None, "+79000000000", "Курьер", lines, ["🛡 Наклейка стекла"])
+    assert "🛡 Наклейка стекла" in render_order_for_admin(db, db.order(order_id))

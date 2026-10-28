@@ -14,6 +14,8 @@ from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardMarku
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from . import keyboards as kb
+from .alerts import send_price_alerts
+from .channel import update_post
 from .catalog_import import (catalog_filters, create_category, exclude_words, import_catalog, merge_categories,
                              only_words, remember_supplier, set_exclude_words, set_merge_categories, set_only_words,
                              set_skip_categories, skip_categories)
@@ -59,6 +61,12 @@ HELP = """<b>Управление ботом</b>
 <b>Б/у устройства</b> (трейд-ин, цена без наценки)
 /bu — список всех устройств: ➕ добавить, ✅ продано (убрать с витрины)
 Добавление — по шагам: модель → аккумулятор → состояние → комментарий → цена → фото. Логотип на фото бот ставит сам.
+
+<b>Клиенты</b>
+/send — рассылка всем, кто заходил в бота (текст или фото, с превью)
+/repair — статусы ремонта по номеру квитанции: /repair 1234 → кнопки статусов
+/channel @канал — публиковать б/у в Telegram-канал (/channel off — выключить)
+Заявки на трейд-ин и запись на ремонт приходят сюда; на трейд-ин отвечайте кнопкой «💬 Предложить цену».
 
 <b>Статистика</b>
 /stats — сколько людей заходило, заказы, популярные категории
@@ -181,6 +189,14 @@ async def finish_import(message: Message, state: FSMContext, db: DB, cfg: Config
         db.set_source(cat_id, *data["source"])
     diff = db.replace_items(cat_id, sections)
     await message.answer(format_report(db, cat_id, diff, skipped))
+    await notify_watchers(message, db)
+
+
+async def notify_watchers(message: Message, db: DB) -> None:
+    """Клиентам — что из их корзины подешевело; владельцу — сколько таких уведомлений ушло."""
+    sent = await send_price_alerts(message.bot, db)
+    if sent:
+        await message.answer(f"🔔 Клиентам сообщено о снижении цен в корзине: {sent}")
 
 
 @router.callback_query(StateFilter(ImportFlow.choose), F.data.startswith("imp:"))
@@ -346,6 +362,10 @@ async def cb_order_status(call: CallbackQuery, bot: Bot, db: DB, cfg: Config):
         await call.answer("Заказ не найден", show_alert=True)
         return
     db.set_order_status(order["id"], status)
+    if status == "ok":  # б/у из подтверждённого заказа — в канале помечаем «ПРОДАНО»
+        for it in db.order_items(order):
+            if "used_id" in it:
+                await update_post(bot, db, cfg, it["used_id"], sold=True)
     await call.message.edit_text(render_order_for_admin(db, db.order(order["id"])), reply_markup=None)
     if status == "ok":
         text = (f"✅ Ваш заказ №{order['id']} подтверждён!\n"
@@ -429,6 +449,7 @@ async def on_document(message: Message, bot: Bot, db: DB, cfg: Config):
     results = import_catalog(db, cfg, catalog)
     stale = [c for c in db.categories() if c["id"] not in {r.cat_id for r in results} and c["n_items"]]
     await message.answer(format_bulk_report(results, stale), reply_markup=stale_keyboard(stale))
+    await notify_watchers(message, db)
 
 
 def format_bulk_report(results, stale=()) -> str:

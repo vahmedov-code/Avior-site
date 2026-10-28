@@ -9,8 +9,8 @@ import io
 import re
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramBadRequest
-from aiogram.filters import Command, StateFilter
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+from aiogram.filters import Command, CommandObject, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup,
@@ -19,6 +19,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from . import keyboards as kb
 from . import watermark
+from .channel import SETTING as CHANNEL_SETTING, channel_id, post_used, update_post
 from .config import Config
 from .db import DB, USED_LABEL
 from .handlers_admin import IsAdmin
@@ -189,6 +190,15 @@ def card_markup(db: DB, cfg: Config, row, user_id: int) -> InlineKeyboardMarkup:
     return b.as_markup()
 
 
+async def send_card(message: Message, db: DB, cfg: Config, row, user_id: int) -> None:
+    photos = db.used_photos(row)
+    markup = card_markup(db, cfg, row, user_id)
+    if photos:
+        await message.answer_photo(photos[0], caption=card_text(cfg, row), reply_markup=markup)
+    else:
+        await message.answer(card_text(cfg, row), reply_markup=markup)
+
+
 @router.callback_query(F.data.startswith("bi:"))
 async def cb_card(call: CallbackQuery, db: DB, cfg: Config):
     row = db.used(int(call.data[3:]))
@@ -197,17 +207,24 @@ async def cb_card(call: CallbackQuery, db: DB, cfg: Config):
     if not row or row["status"] not in visible:
         await call.answer("Это устройство уже продано", show_alert=True)
         return
-    photos = db.used_photos(row)
-    markup = card_markup(db, cfg, row, call.from_user.id)
     try:
         await call.message.delete()
     except TelegramBadRequest:
         pass
-    if photos:
-        await call.message.answer_photo(photos[0], caption=card_text(cfg, row), reply_markup=markup)
-    else:
-        await call.message.answer(card_text(cfg, row), reply_markup=markup)
+    await send_card(call.message, db, cfg, row, call.from_user.id)
     await call.answer()
+
+
+@router.message(CommandStart(deep_link=True, magic=F.args.regexp(r"^bu\d+$")))
+async def start_card(message: Message, command: CommandObject, state: FSMContext, db: DB, cfg: Config):
+    """Кнопка «Купить в боте» из поста в канале: t.me/бот?start=bu12 — сразу карточка устройства."""
+    await state.clear()
+    row = db.used(int(command.args[2:]))
+    if not row or row["status"] != "active":
+        await message.answer("Это устройство уже продано 😔 Посмотрите другие:",
+                             reply_markup=buttons([(f"{USED_LABEL} — все устройства", "bu")], [("🏠 В меню", "home")]))
+        return
+    await send_card(message, db, cfg, row, message.from_user.id)
 
 
 @router.callback_query(F.data.startswith("bp:"))
@@ -263,12 +280,13 @@ async def cmd_used(message: Message, state: FSMContext, db: DB):
 
 
 @admin_router.callback_query(F.data.startswith("bsold:"))
-async def cb_sold(call: CallbackQuery, db: DB):
+async def cb_sold(call: CallbackQuery, bot: Bot, db: DB, cfg: Config):
     row = db.used(int(call.data.split(":")[1]))
     if not row:
         await call.answer()
         return
     db.set_used_status(row["id"], "sold")
+    await update_post(bot, db, cfg, row["id"], sold=True)
     if call.message.photo:  # нажали на карточке устройства
         await call.message.edit_reply_markup(reply_markup=None)
         await call.message.answer(f"✅ Продано и убрано с витрины: {html.escape(row['model'])}",
@@ -578,7 +596,7 @@ async def cb_redo_photos(call: CallbackQuery, state: FSMContext):
 
 
 @admin_router.callback_query(StateFilter(UsedAdd.confirm), F.data == "bupub")
-async def cb_publish(call: CallbackQuery, state: FSMContext, db: DB):
+async def cb_publish(call: CallbackQuery, state: FSMContext, bot: Bot, db: DB, cfg: Config):
     data = await state.get_data()
     used_id = db.add_used(data["kind"], data["model"], data["battery"], data["condition"], data["comment"],
                           data["price"], data["cost"], data["marked"])
@@ -593,6 +611,9 @@ async def cb_publish(call: CallbackQuery, state: FSMContext, db: DB):
         reply_markup=buttons([("👀 Посмотреть", f"bi:{used_id}"), ("📋 Все устройства", "bulist")],
                              [("➕ Добавить ещё", "buadd")]))
     await call.answer("Опубликовано")
+    error = await post_used(bot, db, cfg, used_id)
+    if error:
+        await call.message.answer("⚠️ " + error)
 
 
 # --- управление с карточки ---
@@ -611,7 +632,7 @@ async def cb_price(call: CallbackQuery, state: FSMContext, db: DB):
 
 
 @admin_router.message(StateFilter(UsedPrice.value), F.text, ~F.text.startswith("/"))
-async def on_new_price(message: Message, state: FSMContext, db: DB):
+async def on_new_price(message: Message, state: FSMContext, bot: Bot, db: DB, cfg: Config):
     parsed = parse_price(message.text)
     if not parsed:
         await message.answer("Не понял цену. Пример: <code>43000</code>", reply_markup=cancel_button())
@@ -619,4 +640,44 @@ async def on_new_price(message: Message, state: FSMContext, db: DB):
     used_id = (await state.get_data())["used_id"]
     db.set_used_price(used_id, parsed[0])
     await state.clear()
+    await update_post(bot, db, cfg, used_id)
     await message.answer(f"✅ Новая цена: {fmt_price(parsed[0])}", reply_markup=buttons([("👀 Посмотреть", f"bi:{used_id}")]))
+
+
+# --- канал ---
+
+@admin_router.message(Command("channel"))
+async def cmd_channel(message: Message, command: CommandObject, bot: Bot, db: DB, cfg: Config):
+    arg = (command.args or "").strip()
+    if not arg:
+        current = channel_id(db)
+        await message.answer(
+            (f"Б/у публикуются в канал <code>{current}</code>." if current else "Канал для б/у не подключён.")
+            + "\n\nПодключить: добавьте бота администратором канала (право «Публикация сообщений») и напишите\n"
+              "<code>/channel @имя_канала</code>\n/channel all — опубликовать всё, что сейчас на витрине\n"
+              "/channel off — не публиковать")
+        return
+    if arg == "off":
+        db.set_setting(CHANNEL_SETTING, "")
+        await message.answer("Публикация б/у в канал выключена.")
+        return
+    if arg == "all":
+        if not channel_id(db):
+            await message.answer("Сначала подключите канал: <code>/channel @имя_канала</code>")
+            return
+        errors = [e for r in reversed(db.used_items()) if (e := await post_used(bot, db, cfg, r["id"]))]
+        await message.answer("⚠️ " + errors[0] if errors else "✅ Все устройства с витрины опубликованы в канале.")
+        return
+    try:
+        chat = await bot.get_chat(arg if arg.startswith(("@", "-")) else f"@{arg}")
+        member = await bot.get_chat_member(chat.id, (await bot.me()).id)
+    except (TelegramBadRequest, TelegramForbiddenError):
+        await message.answer("Не нашёл канал. Проверьте имя и что бот добавлен в канал администратором.")
+        return
+    if member.status not in ("administrator", "creator"):
+        await message.answer("Бот есть в канале, но не администратор — дайте ему право «Публикация сообщений».")
+        return
+    db.set_setting(CHANNEL_SETTING, chat.id)
+    await message.answer(f"✅ Канал «{html.escape(chat.title or arg)}» подключён: новые б/у будут публиковаться туда "
+                         "автоматически, проданные — помечаться «ПРОДАНО».\n"
+                         "Опубликовать то, что уже на витрине: /channel all")
