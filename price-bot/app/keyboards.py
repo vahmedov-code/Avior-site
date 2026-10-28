@@ -9,6 +9,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 BTN_CONTACTS = InlineKeyboardButton(text="📞 Контакты и доставка", callback_data="contacts")
 BTN_QUESTION = InlineKeyboardButton(text="💬 Задать вопрос", callback_data="lead")
 BTN_HOME = InlineKeyboardButton(text="🏠 В меню", callback_data="home")
+BTN_CATALOG = InlineKeyboardButton(text="⬅️ Каталог", callback_data="catalog")
 
 
 # Иконка категории по словам в названии; первое совпадение выигрывает
@@ -36,21 +37,33 @@ def cart_button(count: int) -> InlineKeyboardButton:
     return InlineKeyboardButton(text=f"🛒 Корзина ({count})", callback_data="cart")
 
 
-def main_menu(categories, cart_count: int = 0, show_used: bool = False) -> InlineKeyboardMarkup:
+def start_menu(cart_count: int = 0) -> InlineKeyboardMarkup:
+    """Стартовый экран: магазин, ремонт, трейд-ин, связь."""
     kb = InlineKeyboardBuilder()
-    for c in categories:
-        if c["n_items"]:
-            kb.button(text=with_icon(c["title"]), callback_data=f"c:{c['id']}")
-    if show_used:  # раздел б/у — такая же кнопка каталога, последней
-        kb.button(text="♻️ Б/у (проверено)", callback_data="bu")
-    kb.adjust(2)
-    kb.row(InlineKeyboardButton(text="🔍 Поиск", callback_data="find"),
-           InlineKeyboardButton(text="🔧 Ремонт", callback_data="repair"))
-    kb.row(InlineKeyboardButton(text="💰 Сдать устройство в трейд-ин", callback_data="ti"))
+    kb.row(InlineKeyboardButton(text="🛍 Каталог устройств", callback_data="catalog"))
+    kb.row(InlineKeyboardButton(text="🔧 Ремонт", callback_data="repair"),
+           InlineKeyboardButton(text="💰 Трейд-ин", callback_data="ti"))
     if cart_count:
         kb.row(cart_button(cart_count))
     kb.row(BTN_QUESTION)
     kb.row(BTN_CONTACTS)
+    return kb.as_markup()
+
+
+def catalog_menu(categories, cart_count: int = 0, show_used: bool = False) -> InlineKeyboardMarkup:
+    kb = InlineKeyboardBuilder()
+    kb.row(InlineKeyboardButton(text="🔍 Поиск по модели", callback_data="find"))
+    cats = InlineKeyboardBuilder()
+    for c in categories:
+        if c["n_items"]:
+            cats.button(text=with_icon(c["title"]), callback_data=f"c:{c['id']}")
+    if show_used:  # раздел б/у — такая же кнопка каталога, последней
+        cats.button(text="♻️ Б/у (проверено)", callback_data="bu")
+    cats.adjust(2)
+    kb.attach(cats)
+    if cart_count:
+        kb.row(cart_button(cart_count))
+    kb.row(BTN_HOME)
     return kb.as_markup()
 
 
@@ -61,7 +74,7 @@ def sections_menu(cat_id: int, sections: list[str], cart_count: int) -> InlineKe
     kb.adjust(1)
     if cart_count:
         kb.row(cart_button(cart_count))
-    kb.row(BTN_HOME)
+    kb.row(BTN_CATALOG, BTN_HOME)
     return kb.as_markup()
 
 
@@ -92,6 +105,7 @@ def cart_menu(lines) -> InlineKeyboardMarkup:
     kb.adjust(5)
     if any(line.available for line in lines):
         kb.row(InlineKeyboardButton(text="✅ Оформить заказ", callback_data="checkout"))
+    kb.row(InlineKeyboardButton(text="🛍 Продолжить покупки", callback_data="catalog"))
     kb.row(InlineKeyboardButton(text="🗑 Очистить", callback_data="cartclear"), BTN_HOME)
     return kb.as_markup()
 

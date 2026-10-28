@@ -20,7 +20,7 @@ router = Router(name="search")
 async def cb_find(call: CallbackQuery):
     await call.message.answer("🔍 Напишите, что ищете — модель, память, цвет. Например:\n"
                               "<code>15 Pro 256</code> · <code>macbook air m3</code> · <code>airpods pro</code>",
-                              reply_markup=kb.back_home())
+                              reply_markup=InlineKeyboardMarkup(inline_keyboard=[[kb.BTN_CATALOG, kb.BTN_HOME]]))
     await call.answer()
 
 
@@ -29,7 +29,7 @@ def render_results(db: DB, query: str, user_id: int):
     if not hits:
         text = (f"🔍 По запросу «{html.escape(query[:60])}» ничего не нашлось.\n\n"
                 "Попробуйте короче, например <code>15 Pro</code>, или спросите менеджера — привезём под заказ.")
-        return text, InlineKeyboardMarkup(inline_keyboard=[[kb.BTN_QUESTION], [kb.BTN_HOME]])
+        return text, InlineKeyboardMarkup(inline_keyboard=[[kb.BTN_QUESTION], [kb.BTN_CATALOG, kb.BTN_HOME]])
     lines = [f"🔍 <b>{html.escape(query[:60])}</b> — найдено {total}"]
     if total > len(hits):
         lines[0] += f", показаны {len(hits)} самых подходящих. Уточните запрос, чтобы сузить."
@@ -44,7 +44,7 @@ def render_results(db: DB, query: str, user_id: int):
     count = db.cart_count(user_id)
     if count:
         b.row(kb.cart_button(count))
-    b.row(kb.BTN_HOME)
+    b.row(kb.BTN_CATALOG, kb.BTN_HOME)
     return "\n".join(lines)[:4000], b.as_markup()
 
 

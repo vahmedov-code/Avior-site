@@ -43,15 +43,29 @@ def has_device(lines: list[CartLine]) -> bool:
 def welcome(cfg: Config) -> str:
     return (
         f"👋 Добро пожаловать в <b>{html.escape(cfg.shop_name)}</b>!\n\n"
-        f"{html.escape(cfg.welcome_text)}\n\n"
-        "🔍 Чтобы найти товар, просто напишите модель, например: <code>15 Pro 256</code>\n\nИли выберите категорию:"
+        "Магазин техники и сервисный центр в Москве, Можайское ш., 4к1.\n\n"
+        "🛍 <b>Каталог</b> — новая техника и проверенные б/у\n"
+        "🔧 <b>Ремонт</b> — запись и статус ремонта\n"
+        "💰 <b>Трейд-ин</b> — сдайте старое устройство в зачёт или за деньги\n\n"
+        "Выберите, что вас интересует:"
     )
 
 
 def main_menu(db: DB, user_id: int, cfg: Config):
+    return kb.start_menu(db.cart_count(user_id))
+
+
+def catalog_text(cfg: Config) -> str:
+    return (
+        f"🛍 <b>Каталог</b>\n\n{html.escape(cfg.welcome_text)}\n\n"
+        "🔍 Чтобы найти товар, просто напишите модель, например: <code>15 Pro 256</code>\n\nИли выберите категорию:"
+    )
+
+
+def catalog_menu(db: DB, user_id: int, cfg: Config):
     # владельцу раздел б/у виден и пустым — оттуда добавляются устройства
     show_used = bool(db.used_kinds()) or user_id in cfg.admin_ids
-    return kb.main_menu(db.categories(), db.cart_count(user_id), show_used)
+    return kb.catalog_menu(db.categories(), db.cart_count(user_id), show_used)
 
 
 async def safe_edit(call: CallbackQuery, text: str, markup) -> None:
@@ -89,6 +103,16 @@ async def cmd_start(message: Message, state: FSMContext, db: DB, cfg: Config):
 async def cb_home(call: CallbackQuery, state: FSMContext, db: DB, cfg: Config):
     await state.clear()
     await safe_edit(call, welcome(cfg), main_menu(db, call.from_user.id, cfg))
+    await call.answer()
+
+
+@router.callback_query(F.data == "catalog")
+async def cb_catalog(call: CallbackQuery, state: FSMContext, db: DB, cfg: Config):
+    await state.clear()
+    if call.message.photo:  # с карточки б/у: фото не превратить в текст — отправляем новым сообщением
+        await call.message.answer(catalog_text(cfg), reply_markup=catalog_menu(db, call.from_user.id, cfg))
+    else:
+        await safe_edit(call, catalog_text(cfg), catalog_menu(db, call.from_user.id, cfg))
     await call.answer()
 
 
@@ -144,7 +168,7 @@ def render_section(db: DB, cfg: Config, user_id: int, cat, sec_idx: int, page: i
     lines += [line[:PAGE_CHARS] for line in all_lines[start:end]]  # одна строка-гигант тоже не должна ломать страницу
     numbered = [(no, items[no - 1]["id"]) for no in range(start + 1, end + 1)]
 
-    back = f"c:{cat['id']}" if len(sections) > 1 else "home"
+    back = f"c:{cat['id']}" if len(sections) > 1 else "catalog"
     markup = kb.section_page(
         cat["id"], sec_idx, page, numbered, page > 0, page < pages - 1, back, db.cart_count(user_id)
     )

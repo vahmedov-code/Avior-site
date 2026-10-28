@@ -20,7 +20,7 @@ admin_router.callback_query.filter(IsAdmin())
 log = logging.getLogger(__name__)
 
 NEWS_MARKUP = InlineKeyboardMarkup(inline_keyboard=[
-    [InlineKeyboardButton(text="🛍 Открыть каталог", callback_data="home")],
+    [InlineKeyboardButton(text="🛍 Открыть каталог", callback_data="catalog")],
     [InlineKeyboardButton(text="🔕 Не присылать новости", callback_data="newsoff")],
 ])
 _tasks: set = set()  # ссылки на фоновые рассылки, чтобы их не собрал сборщик мусора
@@ -98,7 +98,7 @@ async def cb_go(call: CallbackQuery, state: FSMContext, bot: Bot, db: DB):
 @router.callback_query(F.data == "newsoff")
 async def cb_news_off(call: CallbackQuery, db: DB):
     db.set_news_off(call.from_user.id)
-    await call.message.edit_reply_markup(reply_markup=buttons([("🛍 Открыть каталог", "home")]))
+    await call.message.edit_reply_markup(reply_markup=buttons([("🛍 Открыть каталог", "catalog")]))
     await call.answer("Больше не будем присылать новости", show_alert=True)
 
 

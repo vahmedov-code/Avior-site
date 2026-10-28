@@ -142,7 +142,7 @@ def showcase(db: DB, cfg: Config, user_id: int) -> tuple[str, InlineKeyboardMark
     count = db.cart_count(user_id)
     if count:
         b.row(kb.cart_button(count))
-    b.row(kb.BTN_HOME)
+    b.row(kb.BTN_CATALOG, kb.BTN_HOME)
     return text, b.as_markup()
 
 
