@@ -26,7 +26,7 @@ from .excel import build_xlsx
 from .parser import count_items, parse_post
 from .pricing import apply_markup, fmt_price
 from .rules import filter_sections
-from .stats import format_stats
+from .stats import format_stats, format_users
 from .telegram_export import load_any
 
 router = Router(name="admin")
@@ -573,4 +573,36 @@ async def cb_delcat(call: CallbackQuery, db: DB):
 
 @router.message(Command("stats"))
 async def cmd_stats(message: Message, db: DB, cfg: Config):
-    await message.answer(format_stats(db, cfg))
+    await message.answer(format_stats(db, cfg), reply_markup=stats_markup(db))
+
+
+def stats_markup(db: DB) -> InlineKeyboardMarkup:
+    b = InlineKeyboardBuilder()
+    b.button(text=f"👥 Все пользователи ({db.total_visitors()})", callback_data="users:0")
+    return b.as_markup()
+
+
+@router.callback_query(F.data == "stats")
+async def cb_stats(call: CallbackQuery, db: DB, cfg: Config):
+    await call.message.edit_text(format_stats(db, cfg), reply_markup=stats_markup(db))
+    await call.answer()
+
+
+@router.callback_query(F.data.startswith("users:"))
+async def cb_users(call: CallbackQuery, db: DB, cfg: Config):
+    text, page, pages = format_users(db, cfg, int(call.data.split(":")[1]))
+    b = InlineKeyboardBuilder()
+    nav = []
+    if page > 0:
+        nav.append(("◀️", f"users:{page - 1}"))
+    if page < pages - 1:
+        nav.append(("▶️", f"users:{page + 1}"))
+    for t, d in nav:
+        b.button(text=t, callback_data=d)
+    b.button(text="📊 К статистике", callback_data="stats")
+    b.adjust(len(nav) or 1, 1)
+    try:
+        await call.message.edit_text(text, reply_markup=b.as_markup())
+    except TelegramBadRequest:
+        pass
+    await call.answer()

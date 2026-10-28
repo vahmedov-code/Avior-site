@@ -661,5 +661,15 @@ class DB:
         ).fetchall()
         return [(r["title"], r["n"]) for r in rows]
 
+    def visitors_page(self, offset: int, limit: int) -> list[sqlite3.Row]:
+        """Все посетители, последние сверху: сколько действий, в сколько дней заходил, сколько заказов."""
+        return self.conn.execute(
+            "SELECT v.*, COALESCE(SUM(x.actions), 0) AS actions, COUNT(x.day) AS days, "
+            "(SELECT COUNT(*) FROM orders o WHERE o.user_id = v.user_id) AS orders "
+            "FROM visitors v LEFT JOIN visits x ON x.user_id = v.user_id "
+            "GROUP BY v.user_id ORDER BY v.last_seen DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        ).fetchall()
+
     def recent_visitors(self, limit: int = 10) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM visitors ORDER BY last_seen DESC LIMIT ?", (limit,)).fetchall()

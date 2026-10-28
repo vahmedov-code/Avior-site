@@ -10,6 +10,8 @@ from .config import Config
 from .db import DB
 from .pricing import fmt_price
 
+USERS_PAGE = 25
+
 log = logging.getLogger(__name__)
 
 
@@ -66,3 +68,22 @@ def format_stats(db: DB, cfg: Config) -> str:
             lines.append(f'• <a href="tg://user?id={v["user_id"]}">{who}</a> — {seen:%d.%m %H:%M}')
     lines += ["", "<i>Ваши собственные заходы не считаются.</i>"]
     return "\n".join(lines)
+
+
+def format_users(db: DB, cfg: Config, page: int) -> tuple[str, int, int]:
+    """Список всех посетителей постранично: (текст, страница, всего страниц)."""
+    total = db.total_visitors()
+    pages = max(1, (total + USERS_PAGE - 1) // USERS_PAGE)
+    page = max(0, min(page, pages - 1))
+    tz = ZoneInfo(cfg.timezone)
+    lines = [f"👥 <b>Все пользователи</b>: {total}" + (f" · стр. {page + 1} из {pages}" if pages > 1 else ""),
+             "<i>👆 действий · 📅 дней с визитами · 🛒 заказов</i>", ""]
+    for no, v in enumerate(db.visitors_page(page * USERS_PAGE, USERS_PAGE), start=page * USERS_PAGE + 1):
+        name = html.escape(v["full_name"] or str(v["user_id"]))
+        nick = f" @{v['username']}" if v["username"] else ""
+        first = datetime.fromisoformat(v["first_day"]).strftime("%d.%m")
+        seen = datetime.fromtimestamp(v["last_seen"], tz).strftime("%d.%m %H:%M")
+        orders = f" · 🛒 {v['orders']}" if v["orders"] else ""
+        lines.append(f'{no}. <a href="tg://user?id={v["user_id"]}">{name}</a>{nick}\n'
+                     f"    с {first}, был {seen} · 👆 {v['actions']} · 📅 {v['days']}{orders}")
+    return "\n".join(lines)[:4000], page, pages

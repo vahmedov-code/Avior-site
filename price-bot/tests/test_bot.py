@@ -640,3 +640,18 @@ def test_crm_lead_and_status():
 
     asyncio.run(run())
     assert leads == [{"name": "Иван", "phone": "+79001234567", "text": "iPhone 13: разбит экран", "channel": "telegram"}]
+
+
+def test_all_users_list():
+    from app.config import Config
+    from app.stats import format_users
+    db = DB(":memory:")
+    for uid in range(1, 31):
+        db.track_visit(uid, f"user{uid}" if uid % 2 else None, f"Клиент {uid}", "2026-10-28")
+    db.track_visit(5, "user5", "Клиент 5", "2026-10-29")
+    cfg = Config.from_env(for_bot=False)
+    text, page, pages = format_users(db, cfg, 0)
+    assert (page, pages) == (0, 2) and "Все пользователи</b>: 30" in text and "@user5" in text
+    assert "👆 2 · 📅 2" in text  # у пятого — два дня с визитами
+    text, page, _ = format_users(db, cfg, 5)
+    assert page == 1 and text.count("tg://user") == 5
