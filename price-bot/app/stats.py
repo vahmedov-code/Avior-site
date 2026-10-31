@@ -9,6 +9,7 @@ from aiogram import BaseMiddleware
 from .config import Config
 from .db import DB
 from .pricing import fmt_price
+from . import sources
 
 USERS_PAGE = 25
 
@@ -59,6 +60,13 @@ def format_stats(db: DB, cfg: Config) -> str:
         lines += ["", "<b>Что смотрят</b> (7 дней)"]
         lines += [f"{i}. {html.escape(title)} — {n}" for i, (title, n) in enumerate(top, start=1)]
 
+    by_source = db.source_stats((now.date() - timedelta(days=29)).isoformat())
+    if any(code for code, _, _ in by_source):
+        lines += ["", "<b>Откуда пришли</b> (новые за 30 дней · их заказы)"]
+        for code, people, orders in by_source:
+            lines.append(f"{html.escape(sources.label(code))} — {people}" + (f" · 🛒 {orders}" if orders else ""))
+        lines.append("<i>Ссылки с метками и QR-коды — /links</i>")
+
     recent = db.recent_visitors(5)
     if recent:
         lines += ["", "<b>Последние посетители</b>"]
@@ -84,6 +92,7 @@ def format_users(db: DB, cfg: Config, page: int) -> tuple[str, int, int]:
         first = datetime.fromisoformat(v["first_day"]).strftime("%d.%m")
         seen = datetime.fromtimestamp(v["last_seen"], tz).strftime("%d.%m %H:%M")
         orders = f" · 🛒 {v['orders']}" if v["orders"] else ""
+        source = f"\n    {html.escape(sources.label(v['source']))}" if v["source"] else ""
         lines.append(f'{no}. <a href="tg://user?id={v["user_id"]}">{name}</a>{nick}\n'
-                     f"    с {first}, был {seen} · 👆 {v['actions']} · 📅 {v['days']}{orders}")
+                     f"    с {first}, был {seen} · 👆 {v['actions']} · 📅 {v['days']}{orders}{source}")
     return "\n".join(lines)[:4000], page, pages

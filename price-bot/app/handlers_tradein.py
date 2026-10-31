@@ -165,7 +165,8 @@ async def on_phone(message: Message, state: FSMContext, bot: Bot, db: DB, cfg: C
             if d.get("photos"):
                 await bot.send_media_group(admin_id, [InputMediaPhoto(media=p) for p in d["photos"]])
             await bot.send_message(admin_id, text, reply_markup=buttons(
-                [("💬 Предложить цену", f"tio:{req_id}")], [("❌ Не принимаем", f"tino:{req_id}")]))
+                [("💬 Предложить цену", f"tio:{req_id}")], [("❌ Не принимаем", f"tino:{req_id}")],
+                [("✍️ Задать вопрос клиенту", f"ans:{user.id}")]))
         except (TelegramBadRequest, TelegramForbiddenError):
             pass
     await message.answer(f"✅ Заявка №{req_id} отправлена! Мастер оценит устройство и напишет сюда, "

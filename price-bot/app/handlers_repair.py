@@ -24,6 +24,7 @@ from .config import Config
 from .crm import CrmUnavailable, order_status, send_lead
 from .db import DB
 from .handlers_admin import IsAdmin
+from .handlers_reply import reply_markup
 from .handlers_used import buttons
 from .handlers_user import main_menu, notify_admins, safe_edit, user_link, welcome
 
@@ -151,7 +152,7 @@ async def on_book_phone(message: Message, state: FSMContext, bot: Bot, db: DB, c
     crm = "✅ записана в CRM" if error is None else f"⚠️ в CRM не попала: {html.escape(error)}"
     await notify_admins(bot, cfg, f"🔧 <b>Запись на ремонт</b>\n👤 {user_link(user)}\n"
                                   f"📱 {html.escape(phone)}\n\n<b>{html.escape(d['device'])}</b>\n"
-                                  f"{html.escape(d['problem'])}\n\n{crm}")
+                                  f"{html.escape(d['problem'])}\n\n{crm}", reply_markup(user.id))
     await message.answer("✅ Заявка принята! Мастер перезвонит, подскажет цену и сроки.\n"
                          "📍 Москва, Можайское ш., 4к1", reply_markup=ReplyKeyboardRemove())
     await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))

@@ -137,6 +137,7 @@ MIGRATIONS = (
     ("cart", "seen_avail", "INTEGER"),   # 0 — товар пропадал из прайса
     ("visitors", "news_off", "INTEGER NOT NULL DEFAULT 0"),
     ("visitors", "alerts_off", "INTEGER NOT NULL DEFAULT 0"),
+    ("visitors", "source", "TEXT"),      # метка ссылки, по которой человек пришёл впервые
     ("orders", "services", "TEXT NOT NULL DEFAULT ''"),
     ("used_items", "channel_msg_id", "INTEGER"),
 )
@@ -660,6 +661,27 @@ class DB:
             (since_day, limit),
         ).fetchall()
         return [(r["title"], r["n"]) for r in rows]
+
+    def set_source_if_new(self, user_id: int, source: str) -> None:
+        """Запоминает метку, только если это первый заход человека: иначе старый клиент,
+        открывший ссылку с визитки, «переписал» бы свой настоящий источник."""
+        with self.conn:
+            self.conn.execute(
+                "UPDATE visitors SET source = ? WHERE user_id = ? AND source IS NULL "
+                "AND (SELECT COALESCE(SUM(actions), 0) FROM visits WHERE user_id = ?) <= 1",
+                (source, user_id, user_id),
+            )
+
+    def source_stats(self, since_day: str) -> list[tuple[str | None, int, int]]:
+        """[(метка, новых людей, их заказов)] для пришедших с since_day, больше людей — выше."""
+        rows = self.conn.execute(
+            "SELECT v.source, COUNT(*) AS people, "
+            "(SELECT COUNT(*) FROM orders o JOIN visitors w ON w.user_id = o.user_id "
+            " WHERE w.first_day >= ? AND w.source IS v.source) AS orders "
+            "FROM visitors v WHERE v.first_day >= ? GROUP BY v.source ORDER BY people DESC",
+            (since_day, since_day),
+        ).fetchall()
+        return [(r["source"], r["people"], r["orders"]) for r in rows]
 
     def visitors_page(self, offset: int, limit: int) -> list[sqlite3.Row]:
         """Все посетители, последние сверху: сколько действий, в сколько дней заходил, сколько заказов."""

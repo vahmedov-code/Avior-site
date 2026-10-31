@@ -5,12 +5,13 @@ from zoneinfo import ZoneInfo
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
-from aiogram.filters import CommandStart, StateFilter
+from aiogram.filters import CommandObject, CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
 from . import keyboards as kb
+from . import sources
 from .config import Config
 from .db import DB, CartLine
 from .pricing import fmt_price
@@ -94,8 +95,11 @@ def user_link(user) -> str:
 # --- меню и каталог ---
 
 @router.message(CommandStart())
-async def cmd_start(message: Message, state: FSMContext, db: DB, cfg: Config):
+async def cmd_start(message: Message, command: CommandObject, state: FSMContext, db: DB, cfg: Config):
     await state.clear()
+    source = sources.clean(command.args)  # t.me/бот?start=avito — откуда пришёл клиент
+    if source:
+        db.set_source_if_new(message.from_user.id, source)
     await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))
 
 
@@ -412,7 +416,9 @@ async def cb_lead(call: CallbackQuery, state: FSMContext):
 
 @router.message(StateFilter(Lead.text), F.text)
 async def lead_text(message: Message, state: FSMContext, bot: Bot, db: DB, cfg: Config):
-    await notify_admins(bot, cfg, f"💬 <b>Вопрос</b> от {user_link(message.from_user)}\n\n{html.escape(message.text)}")
+    from .handlers_reply import reply_markup  # здесь: handlers_reply импортирует handlers_admin, а тот — этот модуль
+    await notify_admins(bot, cfg, f"💬 <b>Вопрос</b> от {user_link(message.from_user)}\n\n{html.escape(message.text)}",
+                        reply_markup(message.from_user.id))
     await state.clear()
     await message.answer("✅ Спасибо! Вопрос отправлен, скоро ответим.")
     await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))

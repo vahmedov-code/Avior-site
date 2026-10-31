@@ -9,8 +9,8 @@ from aiogram.exceptions import TelegramBadRequest
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeChat, ErrorEvent
 
-from . import (handlers_admin, handlers_news, handlers_repair, handlers_search, handlers_tradein, handlers_used,
-               handlers_user)
+from . import (handlers_admin, handlers_news, handlers_reply, handlers_repair, handlers_search, handlers_tradein,
+               handlers_used, handlers_user)
 from .config import Config
 from .db import DB
 from .stats import VisitMiddleware
@@ -25,6 +25,7 @@ ADMIN_COMMANDS = [
         ("repair", "Статус ремонта: /repair 1234"),
         ("send", "Рассылка клиентам"),
         ("channel", "Канал для б/у"),
+        ("links", "Ссылки и QR-коды с метками"),
         ("excel", "Прайс с вашими ценами в Excel"),
         ("cats", "Категории, наценки, номера"),
         ("markup", "Общая наценка: /markup 0 10000"),
@@ -95,7 +96,7 @@ async def main() -> None:
     # Поиск последним: он отвечает на любой текст, который не забрали мастера выше.
     dp.include_routers(
         handlers_used.admin_router, handlers_tradein.admin_router, handlers_repair.admin_router,
-        handlers_news.admin_router, handlers_admin.router,
+        handlers_news.admin_router, handlers_reply.admin_router, handlers_admin.router,
         handlers_used.router, handlers_tradein.router, handlers_repair.router, handlers_news.router,
         handlers_user.router, handlers_search.router,
     )

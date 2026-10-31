@@ -219,6 +219,7 @@ async def cb_card(call: CallbackQuery, db: DB, cfg: Config):
 async def start_card(message: Message, command: CommandObject, state: FSMContext, db: DB, cfg: Config):
     """Кнопка «Купить в боте» из поста в канале: t.me/бот?start=bu12 — сразу карточка устройства."""
     await state.clear()
+    db.set_source_if_new(message.from_user.id, "channel")
     row = db.used(int(command.args[2:]))
     if not row or row["status"] != "active":
         await message.answer("Это устройство уже продано 😔 Посмотрите другие:",

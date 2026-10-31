@@ -655,3 +655,21 @@ def test_all_users_list():
     assert "👆 2 · 📅 2" in text  # у пятого — два дня с визитами
     text, page, _ = format_users(db, cfg, 5)
     assert page == 1 and text.count("tg://user") == 5
+
+
+def test_sources_first_visit_only():
+    from app.sources import clean, label
+    assert clean("Avito") == "avito" and clean("bu12") is None and clean("a b") is None
+    assert label(None).startswith("без метки") and label("instagram") == "🏷 instagram"
+    db = DB(":memory:")
+    db.track_visit(1, None, "Новый", "2026-10-31")
+    db.set_source_if_new(1, "avito")
+    db.track_visit(1, None, "Новый", "2026-10-31")
+    db.set_source_if_new(1, "site")  # повторный заход по другой ссылке метку не меняет
+    db.track_visit(2, None, "Старый", "2026-10-31")
+    db.track_visit(2, None, "Старый", "2026-10-31")
+    db.set_source_if_new(2, "card")  # давний клиент без метки открыл визитку — это не новый клиент с визитки
+    db.track_visit(3, None, "С авито", "2026-10-31")
+    db.set_source_if_new(3, "avito")
+    db.create_order(3, "С авито", None, "+79000000000", "Курьер", [])
+    assert db.source_stats("2026-10-01") == [("avito", 2, 1), (None, 1, 0)]
