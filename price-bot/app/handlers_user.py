@@ -1,5 +1,4 @@
 import html
-import logging
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -11,7 +10,6 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
-from . import emoji
 from . import keyboards as kb
 from . import sources
 from .config import Config
@@ -20,7 +18,6 @@ from .pricing import fmt_price
 from .stats import is_customer, today
 
 router = Router(name="user")
-log = logging.getLogger(__name__)
 
 PAGE_SIZE = 25
 
@@ -60,28 +57,12 @@ def main_menu(db: DB, user_id: int, cfg: Config):
 
 
 async def send_start(message: Message, db: DB, cfg: Config, user_id: int) -> None:
-    """Приветствие с меню; с анимированными значками, если владелец их задал командой /emoji."""
-    text, mk = welcome(cfg), main_menu(db, user_id, cfg)
-    m = emoji.emoji_map(db)
-    if m:
-        try:
-            await message.answer(emoji.animate_text(text, m), reply_markup=emoji.animate_markup(mk, m))
-            return
-        except TelegramBadRequest:  # например, закончилась подписка Premium — показываем обычные значки
-            log.warning("Анимированные значки не приняты Telegram", exc_info=True)
-    await message.answer(text, reply_markup=mk)
+    """Приветствие с меню (анимированные значки подставляет emoji.EmojiMiddleware)."""
+    await message.answer(welcome(cfg), reply_markup=main_menu(db, user_id, cfg))
 
 
 async def edit_start(call: CallbackQuery, db: DB, cfg: Config) -> None:
-    text, mk = welcome(cfg), main_menu(db, call.from_user.id, cfg)
-    m = emoji.emoji_map(db)
-    if m:
-        try:
-            await safe_edit(call, emoji.animate_text(text, m), emoji.animate_markup(mk, m))
-            return
-        except TelegramBadRequest:
-            log.warning("Анимированные значки не приняты Telegram", exc_info=True)
-    await safe_edit(call, text, mk)
+    await safe_edit(call, welcome(cfg), main_menu(db, call.from_user.id, cfg))
 
 
 def catalog_text(cfg: Config) -> str:

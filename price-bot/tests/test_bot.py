@@ -759,16 +759,23 @@ def test_max_bot_order_flow():
     assert all(q.get("user_id") in (None, "77") for p, q, _ in sent if p == "/messages")
 
 
-def test_animated_start_emoji():
+def test_animated_emoji():
+    from aiogram.types import MessageEntity
     from app import emoji
-    from app.keyboards import start_menu
+    from app.keyboards import back_home, start_menu
     db = DB(":memory:")
     assert emoji.emoji_map(db) == {}
-    emoji.save(db, [f"id{i}" for i in range(len(emoji.START_EMOJI))])
+    # владелец прислал пары «обычный → анимированный»; у третьего анимированного перед ним нет обычного
+    text = "🏠🏡 ⬅️🔙 📞"
+    def ent(offset, length, cid):
+        return MessageEntity(type="custom_emoji", offset=offset, length=length, custom_emoji_id=cid)
+    found = emoji.pairs_from_message(text, [ent(2, 2, "home"), ent(7, 2, "back"), ent(10, 2, "phone")])
+    assert found == {"🏠": "home", "⬅": "back", "📞": "phone"}
+    emoji.save(db, found)
     m = emoji.emoji_map(db)
-    assert emoji.animate_text("👋 Привет, 🔧 ремонт", m) == (
-        '<tg-emoji emoji-id="id0">👋</tg-emoji> Привет, <tg-emoji emoji-id="id2">🔧</tg-emoji> ремонт')
+    assert emoji.animate_text("⬅️ Назад, 📞 звоните", m) == (
+        '<tg-emoji emoji-id="back">⬅️</tg-emoji> Назад, <tg-emoji emoji-id="phone">📞</tg-emoji> звоните')
+    [[home]] = emoji.animate_markup(back_home(), m).inline_keyboard
+    assert (home.text, home.icon_custom_emoji_id) == ("В меню", "home")
     buttons = [(b.text, b.icon_custom_emoji_id) for r in emoji.animate_markup(start_menu(0), m).inline_keyboard for b in r]
-    assert buttons[:3] == [("Каталог устройств", "id1"), ("Ремонт", "id2"), ("Трейд-ин", "id3")]
-    emoji.save(db, None)
-    assert emoji.emoji_map(db) == {}
+    assert buttons[-1] == ("Контакты и доставка", "phone") and buttons[0] == ("🛍 Каталог устройств", None)

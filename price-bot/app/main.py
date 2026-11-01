@@ -13,6 +13,7 @@ from . import (handlers_admin, handlers_news, handlers_reply, handlers_repair, h
                handlers_used, handlers_user)
 from .config import Config
 from .db import DB
+from .emoji import EmojiMiddleware
 from .stats import VisitMiddleware
 
 
@@ -26,7 +27,7 @@ ADMIN_COMMANDS = [
         ("send", "Рассылка клиентам"),
         ("channel", "Канал для б/у"),
         ("links", "Ссылки и QR-коды с метками"),
-        ("emoji", "Анимированные значки на первой странице"),
+        ("emoji", "Анимированные значки в боте"),
         ("excel", "Прайс с вашими ценами в Excel"),
         ("cats", "Категории, наценки, номера"),
         ("markup", "Общая наценка: /markup 0 10000"),
@@ -91,6 +92,7 @@ async def main() -> None:
     )
 
     bot = Bot(cfg.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML, link_preview_is_disabled=True))
+    bot.session.middleware(EmojiMiddleware(db))  # анимированные значки из /emoji — во всех сообщениях
     dp = Dispatcher(storage=MemoryStorage(), db=db, cfg=cfg)
     # Админский роутер первым: пересланный владельцем прайс должен уйти в импорт.
     # Мастер б/у раньше импорта: фото-файлы в нём не должны уйти в загрузку прайса.

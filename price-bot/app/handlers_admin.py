@@ -73,7 +73,7 @@ HELP = """<b>Управление ботом</b>
 
 <b>Статистика</b>
 /stats — сколько людей заходило, откуда пришли, заказы, популярные категории
-/emoji — анимированные значки на первой странице (нужен Telegram Premium у владельца)
+/emoji — анимированные значки в тексте и на кнопках (нужен Telegram Premium у владельца)
 /links — ссылки на бота с метками (сайт, Авито, QR в сервисе…) и QR-коды для печати
 
 <b>Заказы</b>
@@ -584,29 +584,34 @@ class EmojiSet(StatesGroup):
 async def cmd_emoji(message: Message, command: CommandObject, state: FSMContext, db: DB):
     if (command.args or "").strip() == "off":
         emoji.save(db, None)
-        await message.answer("Анимированные значки выключены — на первой странице обычные эмодзи.")
+        await message.answer("Анимированные значки выключены — везде обычные эмодзи.")
         return
     await state.set_state(EmojiSet.wait)
+    current = emoji.emoji_map(db)
+    done = " ".join(f'<tg-emoji emoji-id="{cid}">{k}</tg-emoji>' for k, cid in current.items()) or "пока нет"
     await message.answer(
-        "✨ <b>Анимированные значки на первой странице</b>\n\n"
-        f"Пришлите одним сообщением {len(emoji.START_EMOJI)} анимированных эмодзи по порядку — замены для:\n"
-        f"{' '.join(emoji.START_EMOJI)}\n\n"
-        "Выбирайте их в панели эмодзи из премиум-наборов (анимированные). Работает, пока у владельца бота "
-        "есть Telegram Premium. /emoji off — вернуть обычные значки.")
+        "✨ <b>Анимированные значки</b> — в тексте и на кнопках по всему боту\n\n"
+        "Пришлите пары: <b>обычный значок, сразу за ним — анимированный</b> из премиум-набора. "
+        "Можно много пар в одном сообщении и в несколько заходов — новые добавляются к уже заданным.\n"
+        "Например: 🏠🏠 📍📍 📞📞 (вторым в каждой паре — анимированный)\n\n"
+        f"Значки бота: {emoji.COMMON}\n"
+        f"Уже анимированы: {done}\n\n"
+        "Нужен Telegram Premium у владельца бота. /emoji off — убрать все замены.")
 
 
 @router.message(StateFilter(EmojiSet.wait), ~F.text.startswith("/"))
 async def on_emoji(message: Message, state: FSMContext, db: DB, cfg: Config):
-    ids = [e.custom_emoji_id for e in (message.entities or []) if e.type == "custom_emoji"]
-    need = len(emoji.START_EMOJI)
-    if len(ids) != need:
-        await message.answer(f"Нашёл анимированных значков: {len(ids)}, а нужно {need} — по одному на "
-                             f"{' '.join(emoji.START_EMOJI)}. Обычные эмодзи не подходят, нужны из премиум-наборов. "
-                             "Пришлите ещё раз.")
+    found = emoji.pairs_from_message(message.text or "", message.entities)
+    if not found:
+        await message.answer("Не нашёл анимированных значков. Нужны эмодзи из премиум-наборов (они двигаются в "
+                             "панели эмодзи). Пришлите ещё раз: обычный значок, сразу за ним анимированный.")
         return
     await state.clear()
-    emoji.save(db, ids)
-    await message.answer("✅ Готово! Так теперь выглядит первая страница:")
+    current = emoji.emoji_map(db)
+    current.update(found)
+    emoji.save(db, current)
+    await message.answer(f"✅ Добавлено замен: {len(found)} ({' '.join(found)}). Всего: {len(current)}.\n"
+                         "Так теперь выглядит первая страница:")
     await send_start(message, db, cfg, message.from_user.id)
 
 
