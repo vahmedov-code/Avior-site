@@ -123,6 +123,11 @@ CREATE TABLE IF NOT EXISTS crm_watch (
     created_at  INTEGER NOT NULL,
     PRIMARY KEY (order_no, user_id)
 );
+-- Фото б/у хранятся как file_id Telegram; в MAX их один раз загружаем и запоминаем вложение
+CREATE TABLE IF NOT EXISTS max_photos (
+    tg_file_id TEXT PRIMARY KEY,
+    payload    TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS repair_watch (
     number  TEXT NOT NULL,
     user_id INTEGER NOT NULL,
@@ -187,7 +192,8 @@ class DB:
     def __init__(self, path: str):
         if path != ":memory:":
             os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
-        self.conn = sqlite3.connect(path)
+        # timeout: базу одновременно используют бот Telegram, бот MAX и сборщик
+        self.conn = sqlite3.connect(path, timeout=30)
         self.conn.row_factory = sqlite3.Row
         self.conn.execute("PRAGMA foreign_keys = ON")
         self.conn.executescript(SCHEMA)
@@ -555,6 +561,10 @@ class DB:
     def tradein(self, req_id: int) -> sqlite3.Row | None:
         return self.conn.execute("SELECT * FROM tradein WHERE id = ?", (req_id,)).fetchone()
 
+    def set_tradein_photos(self, req_id: int, photos: list[str]) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE tradein SET photos = ? WHERE id = ?", (json.dumps(photos), req_id))
+
     def set_tradein(self, req_id: int, status: str, offer: str | None = None) -> None:
         with self.conn:
             if offer is None:
@@ -611,6 +621,22 @@ class DB:
     def set_news_off(self, user_id: int, off: bool = True) -> None:
         with self.conn:
             self.conn.execute("UPDATE visitors SET news_off = ? WHERE user_id = ?", (int(off), user_id))
+
+    # --- MAX ---
+    def max_photo(self, tg_file_id: str) -> dict | None:
+        row = self.conn.execute("SELECT payload FROM max_photos WHERE tg_file_id = ?", (tg_file_id,)).fetchone()
+        return json.loads(row[0]) if row else None
+
+    def save_max_photo(self, tg_file_id: str, payload: dict) -> None:
+        with self.conn:
+            self.conn.execute("INSERT OR REPLACE INTO max_photos(tg_file_id, payload) VALUES(?, ?)",
+                              (tg_file_id, json.dumps(payload)))
+
+    def platform_counts(self) -> tuple[int, int]:
+        """(клиентов Telegram, клиентов MAX)."""
+        tg, mx = self.conn.execute(
+            "SELECT COALESCE(SUM(user_id > 0), 0), COALESCE(SUM(user_id < 0), 0) FROM visitors").fetchone()
+        return tg, mx
 
     # --- статистика ---
     def track_visit(self, user_id: int, username: str | None, full_name: str, day: str) -> None:

@@ -673,3 +673,87 @@ def test_sources_first_visit_only():
     db.set_source_if_new(3, "avito")
     db.create_order(3, "С авито", None, "+79000000000", "Курьер", [])
     assert db.source_stats("2026-10-01") == [("avito", 2, 1), (None, 1, 0)]
+
+
+def test_max_helpers():
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    from app.max_api import buttons_from_markup, phone_from_contact, to_internal, to_max
+    vcf = "BEGIN:VCARD\nVERSION:3.0\nFN:Анна\nTEL;TYPE=cell:7 (900) 123-45-67\nEND:VCARD"
+    assert phone_from_contact({"vcf_info": vcf}) == "+79001234567"
+    assert phone_from_contact({}) is None
+    mk = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="Каталог", callback_data="catalog"),
+                                                InlineKeyboardButton(text="Сайт", url="https://avior.moscow")]])
+    assert buttons_from_markup(mk) == [[{"type": "callback", "text": "Каталог", "payload": "catalog"},
+                                        {"type": "link", "text": "Сайт", "url": "https://avior.moscow"}]]
+    assert to_internal(500) == -500 and to_max(-500) == 500
+
+
+def test_max_bot_order_flow():
+    """Клиент MAX: старт по ссылке с меткой → товар в корзину → заказ с телефоном из контакта.
+    Заказ сохраняется в общей базе, владелец получает его в Telegram."""
+    import asyncio
+    from dataclasses import replace
+    from aiohttp import web
+    from app.config import Config
+    from app.max_api import MaxApi
+    from app.max_bot import MaxBot
+    from app.parser import Section
+
+    sent, admin = [], []
+
+    class FakeTelegram:
+        async def send_message(self, chat_id, text, reply_markup=None):
+            admin.append(text)
+
+    async def handler(request):
+        body = await request.json() if request.can_read_body else None
+        sent.append((request.path, dict(request.query), body))
+        if request.path == "/messages" and request.method == "POST":
+            return web.json_response({"message": {"body": {"mid": "m", "seq": 1}, "recipient": {"chat_type": "dialog"},
+                                                  "timestamp": 1}})
+        return web.json_response({"success": True})
+
+    async def run():
+        app = web.Application()
+        app.router.add_route("*", "/{tail:.*}", handler)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        port = site._server.sockets[0].getsockname()[1]
+        cfg = replace(Config.from_env(for_bot=False), admin_ids=frozenset({1}), max_token="T",
+                      max_api_url=f"http://127.0.0.1:{port}")
+        db = DB(":memory:")
+        db.set_setting("markup_pct", 0)
+        db.set_setting("markup_fixed", 0)
+        c = db.add_category("Аксессуары")
+        db.replace_items(c, [Section("Стекла", [Item("Стекло 15 Pro", 1500, "")])])
+        api = MaxApi("T", cfg.max_api_url)
+        bot = MaxBot(api, FakeTelegram(), db, cfg)
+        user = {"user_id": 77, "first_name": "Анна", "username": "anna", "is_bot": False}
+
+        def cb(p):
+            return {"update_type": "message_callback", "timestamp": 1,
+                    "callback": {"timestamp": 1, "callback_id": p, "payload": p, "user": user}}
+        contact = {"type": "contact", "payload": {"vcf_info": "TEL;TYPE=cell:79001234567"}}
+        updates = [{"update_type": "bot_started", "timestamp": 1, "chat_id": 1, "user": user, "payload": "vk"},
+                   cb("c:1"), cb("a:1:0"), cb("checkout"), cb("d:0"),
+                   {"update_type": "message_created", "timestamp": 1,
+                    "message": {"sender": user, "recipient": {"chat_type": "dialog"}, "timestamp": 1,
+                                "body": {"mid": "x", "seq": 1, "text": "", "attachments": [contact]}}}]
+        try:
+            for u in updates:
+                await bot.process(u)
+        finally:
+            await api.close()
+            await runner.cleanup()
+        return db
+
+    db = asyncio.run(run())
+    [order] = db.recent_orders()
+    assert (order["user_id"], order["phone"], order["total"]) == (-77, "+79001234567", 1500)
+    assert db.conn.execute("SELECT source FROM visitors WHERE user_id = -77").fetchone()[0] == "vk"
+    assert any("Заказ №1" in t and "MAX" in t for t in admin)
+    texts = [(b or {}).get("text") or ((b or {}).get("message") or {}).get("text") or "" for _, _, b in sent]
+    assert any("Заказ №1 оформлен" in t for t in texts)
+    assert all(q.get("user_id") in (None, "77") for p, q, _ in sent if p == "/messages")

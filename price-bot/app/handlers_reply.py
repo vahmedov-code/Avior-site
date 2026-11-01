@@ -3,13 +3,12 @@
 import html
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
-from . import sources
+from . import outbox, sources
 from .config import Config
 from .db import DB
 from .handlers_admin import IsAdmin
@@ -55,17 +54,18 @@ async def cb_answer_cancel(call: CallbackQuery, state: FSMContext):
 
 
 @admin_router.message(StateFilter(Answer.text), ~F.text.startswith("/"))
-async def on_answer(message: Message, state: FSMContext, bot: Bot):
+async def on_answer(message: Message, state: FSMContext, bot: Bot, cfg: Config):
     user_id = (await state.get_data())["user_id"]
     await state.clear()
     try:
         if message.text:
-            await bot.send_message(user_id, f"💬 <b>Ответ AVIOR</b>\n\n{html.escape(message.text)}",
-                                   reply_markup=CLIENT_MARKUP)
+            await outbox.send(bot, cfg, user_id, f"💬 <b>Ответ AVIOR</b>\n\n{html.escape(message.text)}",
+                              CLIENT_MARKUP)
         else:  # фото, голосовое, файл — пересылаем как есть, без «переслано от»
-            await bot.copy_message(user_id, message.chat.id, message.message_id, reply_markup=CLIENT_MARKUP)
-    except (TelegramBadRequest, TelegramForbiddenError):
-        await message.answer("⚠️ Не доставлено: клиент заблокировал бота или ещё ни разу ему не писал.")
+            await outbox.copy(bot, cfg, user_id, message, CLIENT_MARKUP)
+    except outbox.DeliveryError as e:
+        await message.answer("⚠️ Не доставлено: клиент заблокировал бота или ещё ни разу ему не писал.\n"
+                             f"<i>{html.escape(str(e))[:200]}</i>")
         return
     await message.answer("✅ Ответ отправлен. Если клиент ответит, его сообщение придёт сюда.",
                          reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
@@ -91,6 +91,11 @@ async def cmd_links(message: Message, command: CommandObject, bot: Bot, db: DB, 
     if short != main:
         lines.append(f"\n<i>Ссылки через @{short} работают, пока активна подписка Telegram Premium. "
                      f"QR-коды для печати поэтому ведут на постоянный адрес @{main}.</i>")
+    max_name = await max_username(cfg)
+    if max_name:
+        lines.append(f"\n🔵 <b>Бот в MAX</b>: <code>https://max.ru/{max_name}</code>\n"
+                     f"Метки те же, например <code>https://max.ru/{max_name}?start=vk</code> — "
+                     "в /stats переходы из обоих мессенджеров считаются вместе.")
     rows, row = [], []
     for code, title in sources.SOURCES.items():
         row.append(InlineKeyboardButton(text=f"QR: {title.split(' ', 1)[1][:18]}", callback_data=f"qr:{code}"))
@@ -100,6 +105,21 @@ async def cmd_links(message: Message, command: CommandObject, bot: Bot, db: DB, 
     if row:
         rows.append(row)
     await message.answer("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
+
+
+_max_name: dict[str, str] = {}
+
+
+async def max_username(cfg: Config) -> str | None:
+    """Ник бота в MAX (один раз спрашиваем у API); None — MAX не подключён или недоступен."""
+    if not cfg.max_token:
+        return None
+    if cfg.max_token not in _max_name:
+        try:
+            _max_name[cfg.max_token] = (await outbox.max_api(cfg).me()).get("username") or ""
+        except Exception:
+            return None
+    return _max_name[cfg.max_token] or None
 
 
 async def send_qr(message: Message, main: str, short: str, code: str) -> None:

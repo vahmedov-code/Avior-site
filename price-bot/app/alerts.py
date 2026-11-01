@@ -4,9 +4,10 @@ import html
 import logging
 
 from aiogram import Bot
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
+from . import outbox
+from .config import Config
 from .db import DB
 from .pricing import fmt_price
 
@@ -29,14 +30,14 @@ def format_alert(items) -> str:
     return "\n".join(lines)
 
 
-async def send_price_alerts(bot: Bot, db: DB) -> int:
+async def send_price_alerts(bot: Bot, db: DB, cfg: Config) -> int:
     """Вызывается после каждого обновления прайса. Возвращает, скольким клиентам написали."""
     sent = 0
     for user_id, items in db.price_alerts().items():
         try:
-            await bot.send_message(user_id, format_alert(items), reply_markup=MARKUP)
+            await outbox.send(bot, cfg, user_id, format_alert(items), MARKUP)
             sent += 1
-        except (TelegramBadRequest, TelegramForbiddenError):
+        except outbox.DeliveryError:
             pass
         except Exception:  # сеть: уведомления не должны ломать обновление цен
             log.exception("Не удалось отправить уведомление о цене")

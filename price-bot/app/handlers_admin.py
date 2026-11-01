@@ -5,7 +5,7 @@ import json
 from datetime import date
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
+from aiogram.exceptions import TelegramBadRequest
 from aiogram.filters import Command, CommandObject, Filter, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -14,6 +14,7 @@ from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardMarku
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from . import keyboards as kb
+from . import outbox
 from .alerts import send_price_alerts
 from .channel import update_post
 from .catalog_import import (catalog_filters, create_category, exclude_words, import_catalog, merge_categories,
@@ -191,12 +192,12 @@ async def finish_import(message: Message, state: FSMContext, db: DB, cfg: Config
         db.set_source(cat_id, *data["source"])
     diff = db.replace_items(cat_id, sections)
     await message.answer(format_report(db, cat_id, diff, skipped))
-    await notify_watchers(message, db)
+    await notify_watchers(message, db, cfg)
 
 
-async def notify_watchers(message: Message, db: DB) -> None:
+async def notify_watchers(message: Message, db: DB, cfg: Config) -> None:
     """Клиентам — что из их корзины подешевело; владельцу — сколько таких уведомлений ушло."""
-    sent = await send_price_alerts(message.bot, db)
+    sent = await send_price_alerts(message.bot, db, cfg)
     if sent:
         await message.answer(f"🔔 Клиентам сообщено о снижении цен в корзине: {sent}")
 
@@ -376,8 +377,8 @@ async def cb_order_status(call: CallbackQuery, bot: Bot, db: DB, cfg: Config):
         text = (f"❌ Заказ №{order['id']} отменён.\n"
                 "Если это ошибка или остались вопросы — напишите нам, контакты в меню бота.")
     try:
-        await bot.send_message(order["user_id"], text)
-    except (TelegramBadRequest, TelegramForbiddenError):
+        await outbox.send(bot, cfg, order["user_id"], text)
+    except outbox.DeliveryError:
         await call.answer("Статус сохранён, но клиент заблокировал бота", show_alert=True)
         return
     await call.answer("Клиент уведомлён")
@@ -451,7 +452,7 @@ async def on_document(message: Message, bot: Bot, db: DB, cfg: Config):
     results = import_catalog(db, cfg, catalog)
     stale = [c for c in db.categories() if c["id"] not in {r.cat_id for r in results} and c["n_items"]]
     await message.answer(format_bulk_report(results, stale), reply_markup=stale_keyboard(stale))
-    await notify_watchers(message, db)
+    await notify_watchers(message, db, cfg)
 
 
 def format_bulk_report(results, stale=()) -> str:

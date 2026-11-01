@@ -43,6 +43,9 @@ def format_stats(db: DB, cfg: Config) -> str:
     periods = [("Сегодня", 1), ("7 дней", 7), ("30 дней", 30)]
     lines = [f"📊 <b>Статистика бота</b> на {now:%d.%m %H:%M}", "",
              f"👥 Всего заходили: <b>{db.total_visitors()}</b>", ""]
+    tg, mx = db.platform_counts()
+    if mx:
+        lines[-1:-1] = [f"✈️ Telegram: {tg} · 🔵 MAX: {mx}"]
     lines.append("<b>Посетители</b> (новые · активные · действий)")
     for label, days in periods:
         since = (now.date() - timedelta(days=days - 1)).isoformat()
@@ -73,7 +76,8 @@ def format_stats(db: DB, cfg: Config) -> str:
         for v in recent:
             who = f"@{v['username']}" if v["username"] else html.escape(v["full_name"] or str(v["user_id"]))
             seen = datetime.fromtimestamp(v["last_seen"], ZoneInfo(cfg.timezone))
-            lines.append(f'• <a href="tg://user?id={v["user_id"]}">{who}</a> — {seen:%d.%m %H:%M}')
+            link = f'<a href="tg://user?id={v["user_id"]}">{who}</a>' if v["user_id"] > 0 else f"{who} · MAX"
+            lines.append(f"• {link} — {seen:%d.%m %H:%M}")
     lines += ["", "<i>Ваши собственные заходы не считаются.</i>"]
     return "\n".join(lines)
 
@@ -93,6 +97,7 @@ def format_users(db: DB, cfg: Config, page: int) -> tuple[str, int, int]:
         seen = datetime.fromtimestamp(v["last_seen"], tz).strftime("%d.%m %H:%M")
         orders = f" · 🛒 {v['orders']}" if v["orders"] else ""
         source = f"\n    {html.escape(sources.label(v['source']))}" if v["source"] else ""
-        lines.append(f'{no}. <a href="tg://user?id={v["user_id"]}">{name}</a>{nick}\n'
+        link = f'<a href="tg://user?id={v["user_id"]}">{name}</a>' if v["user_id"] > 0 else f"{name} · <b>MAX</b>"
+        lines.append(f'{no}. {link}{nick}\n'
                      f"    с {first}, был {seen} · 👆 {v['actions']} · 📅 {v['days']}{orders}{source}")
     return "\n".join(lines)[:4000], page, pages

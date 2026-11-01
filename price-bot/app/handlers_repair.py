@@ -12,7 +12,6 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import Command, CommandObject, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
@@ -20,6 +19,7 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from . import keyboards as kb
+from . import outbox
 from .config import Config
 from .crm import CrmUnavailable, order_status, send_lead
 from .db import DB
@@ -249,9 +249,9 @@ async def crm_status_poller(bot: Bot, db: DB, cfg: Config) -> None:
                 continue
             done = any(word in found["status"].lower() for word in DONE_WORDS)
             try:
-                await bot.send_message(w["user_id"], "🔔 Обновился статус ремонта\n\n" + crm_text(found),
-                                       reply_markup=kb.back_home())
-            except (TelegramBadRequest, TelegramForbiddenError):
+                await outbox.send(bot, cfg, w["user_id"], "🔔 Обновился статус ремонта\n\n" + crm_text(found),
+                                  kb.back_home())
+            except outbox.DeliveryError:
                 done = True  # клиент заблокировал бота
             db.update_crm_watch(w["order_no"], w["user_id"], None if done else found["status"])
             await asyncio.sleep(1)  # не нагружаем CRM
@@ -273,10 +273,10 @@ async def save_status(bot: Bot, db: DB, cfg: Config, number: str, status: str, d
     sent = 0
     for user_id in watchers:
         try:
-            await bot.send_message(user_id, "🔔 Обновился статус ремонта\n\n" + status_text(cfg, row),
-                                   reply_markup=kb.back_home())
+            await outbox.send(bot, cfg, user_id, "🔔 Обновился статус ремонта\n\n" + status_text(cfg, row),
+                              kb.back_home())
             sent += 1
-        except (TelegramBadRequest, TelegramForbiddenError):
+        except outbox.DeliveryError:
             pass
     who = f"клиент уведомлён ({sent})" if sent else "клиент ещё не проверял статус в боте — увидит, когда проверит"
     return f"✅ Квитанция №{html.escape(number)}: {html.escape(status)}\n{who}"

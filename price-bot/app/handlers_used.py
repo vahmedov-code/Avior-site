@@ -153,24 +153,30 @@ async def cb_showcase(call: CallbackQuery, state: FSMContext, db: DB, cfg: Confi
     await call.answer()
 
 
-@router.callback_query(F.data.startswith("bk:"))
-async def cb_kind(call: CallbackQuery, db: DB):
-    kind = call.data[3:]
+def kind_list(db: DB, kind: str, user_id: int) -> tuple[str, InlineKeyboardMarkup] | None:
+    """Список б/у раздела; None — раздел опустел."""
     rows = db.used_items(kind)
     if not rows:
-        await call.answer("В этом разделе всё разобрали", show_alert=True)
-        return
+        return None
     b = InlineKeyboardBuilder()
     for r in rows:
         battery = f" · 🔋{r['battery']}" if r["battery"] else ""
         b.button(text=f"{r['model']}{battery} · {fmt_price(r['price'])}", callback_data=f"bi:{r['id']}")
     b.adjust(1)
-    count = db.cart_count(call.from_user.id)
+    count = db.cart_count(user_id)
     if count:
         b.row(kb.cart_button(count))
     b.row(InlineKeyboardButton(text="⬅️ Назад", callback_data="bu"), kb.BTN_HOME)
-    await show(call, f"<b>{USED_LABEL} › {html.escape(kind)}</b>\n\nНажмите на устройство, чтобы посмотреть фото.",
-               b.as_markup())
+    return f"<b>{USED_LABEL} › {html.escape(kind)}</b>\n\nНажмите на устройство, чтобы посмотреть фото.", b.as_markup()
+
+
+@router.callback_query(F.data.startswith("bk:"))
+async def cb_kind(call: CallbackQuery, db: DB):
+    screen = kind_list(db, call.data[3:], call.from_user.id)
+    if not screen:
+        await call.answer("В этом разделе всё разобрали", show_alert=True)
+        return
+    await show(call, *screen)
     await call.answer()
 
 

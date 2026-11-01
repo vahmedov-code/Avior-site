@@ -57,6 +57,9 @@ class Config:
     used_note: str = DEFAULT_USED_NOTE
     services: tuple[str, ...] = tuple(DEFAULT_SERVICES.split(","))
     crm_api_url: str = "https://cms.avior.moscow/api"
+    max_token: str = ""                      # токен бота MAX (business.max.ru)
+    max_api_url: str = "https://platform-api2.max.ru"
+    max_ca_file: str = ""                    # сертификат НУЦ Минцифры, если система его не знает
     link_username: str = ""  # дополнительный (Premium) адрес бота для красивых ссылок, напр. avior_app
     crm_lead_secret: str = ""
 
@@ -87,6 +90,9 @@ class Config:
                 o.strip() for o in os.getenv("DELIVERY_OPTIONS", DEFAULT_DELIVERY).split(",") if o.strip()
             ),
             used_note=_text("USED_NOTE", DEFAULT_USED_NOTE),
+            max_token=os.getenv("MAX_TOKEN", "").strip(),
+            max_api_url=os.getenv("MAX_API_URL", "https://platform-api2.max.ru").strip().rstrip("/"),
+            max_ca_file=os.getenv("MAX_CA_FILE", "").strip(),
             link_username=os.getenv("LINK_USERNAME", "").strip().lstrip("@"),
             crm_api_url=os.getenv("CRM_API_URL", "https://cms.avior.moscow/api").rstrip("/"),
             crm_lead_secret=os.getenv("CRM_LEAD_SECRET", "").strip(),

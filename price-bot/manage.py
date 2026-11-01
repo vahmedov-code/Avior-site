@@ -5,6 +5,7 @@
   python manage.py excel                     Excel из текущей базы бота
   python manage.py catalog result.json       сжать большой экспорт в catalog.json (его можно отправить боту)
   python manage.py import-collected F.json   принять результат сборщика с Windows-сервера (его вызывает сам сборщик)
+  python manage.py max-check                 проверить связь с API MAX и токен бота MAX
 
 result.json — экспорт группы поставщика из Telegram Desktop
 (⋮ в группе → Экспорт истории чата → формат JSON, без фото и файлов).
@@ -133,12 +134,46 @@ def cmd_import_collected(args, cfg: Config) -> None:
                 else:
                     await bot.send_message(admin_id, text)
             # клиентам — что из их корзины подешевело или снова появилось
-            sent = await send_price_alerts(bot, bot_db(bot_cfg))
+            sent = await send_price_alerts(bot, bot_db(bot_cfg), bot_cfg)
             print(f"Уведомлений о ценах: {sent}")
         finally:
             await bot.session.close()
 
     asyncio.run(send())
+
+
+def cmd_max_check(args, cfg: Config) -> None:
+    """Проверяет, отвечает ли API MAX с этого сервера и подходит ли токен."""
+    import asyncio
+
+    from app.max_api import MaxApi, MaxError
+
+    if not cfg.max_token:
+        sys.exit("MAX_TOKEN не задан в .env")
+    hosts = [cfg.max_api_url] + [h for h in ("https://platform-api2.max.ru", "https://platform-api.max.ru")
+                                 if h != cfg.max_api_url]
+
+    async def check():
+        ok = None
+        for host in hosts:
+            api = MaxApi(cfg.max_token, host, cfg.max_ca_file)
+            try:
+                me = await api.me()
+                print(f"✅ {host}: бот «{me.get('first_name') or me.get('name')}», max.ru/{me.get('username')}")
+                ok = ok or host
+            except MaxError as e:
+                print(f"❌ {host}: {e}" + (" — проверьте токен" if e.status == 401 else ""))
+            except Exception as e:  # сеть, сертификат
+                hint = " — нужен сертификат НУЦ Минцифры (MAX_CA_FILE)" if "CERTIFICATE" in str(e).upper() else ""
+                print(f"❌ {host}: {type(e).__name__}: {str(e)[:150]}{hint}")
+            finally:
+                await api.close()
+        if ok and ok != cfg.max_api_url:
+            print(f"\nРаботает {ok} — впишите в .env: MAX_API_URL={ok}")
+        elif ok:
+            print("\nВсё в порядке, можно запускать бота MAX.")
+
+    asyncio.run(check())
 
 
 def main() -> None:
@@ -161,6 +196,8 @@ def main() -> None:
     p.add_argument("file")
     p.add_argument("--report", action="store_true", help="прислать отчёт, даже если ничего не изменилось")
     p.set_defaults(func=cmd_import_collected)
+    p = sub.add_parser("max-check", help="проверить связь с API MAX и токен бота")
+    p.set_defaults(func=cmd_max_check)
     args = parser.parse_args()
     args.func(args, Config.from_env(for_bot=False))
 

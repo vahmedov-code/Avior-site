@@ -12,6 +12,7 @@ from aiogram.types import CallbackQuery, InputMediaPhoto, Message, ReplyKeyboard
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from . import keyboards as kb
+from . import outbox
 from .config import Config
 from .db import DB
 from .handlers_admin import IsAdmin
@@ -199,34 +200,34 @@ async def cb_offer_cancel(call: CallbackQuery, state: FSMContext):
 
 
 @admin_router.message(StateFilter(TradeOffer.text), F.text, ~F.text.startswith("/"))
-async def on_offer(message: Message, state: FSMContext, bot: Bot, db: DB):
+async def on_offer(message: Message, state: FSMContext, bot: Bot, db: DB, cfg: Config):
     req = db.tradein((await state.get_data())["req_id"])
     await state.clear()
     offer = message.text.strip()[:1000]
     db.set_tradein(req["id"], "offered", offer)
     try:
-        await bot.send_message(req["user_id"],
-                               f"💰 <b>Оценка вашего {html.escape(req['model'])}</b> (заявка №{req['id']})\n\n"
-                               f"{html.escape(offer)}",
-                               reply_markup=buttons([("✅ Согласен", f"tiyes:{req['id']}"),
-                                                     ("❌ Не подходит", f"tinot:{req['id']}")]))
-    except (TelegramBadRequest, TelegramForbiddenError):
+        await outbox.send(bot, cfg, req["user_id"],
+                          f"💰 <b>Оценка вашего {html.escape(req['model'])}</b> (заявка №{req['id']})\n\n"
+                          f"{html.escape(offer)}",
+                          buttons([("✅ Согласен", f"tiyes:{req['id']}"), ("❌ Не подходит", f"tinot:{req['id']}")]))
+    except outbox.DeliveryError:
         await message.answer("⚠️ Клиент заблокировал бота — позвоните ему: " + html.escape(req["phone"]))
         return
     await message.answer(f"✅ Оценка отправлена клиенту (заявка №{req['id']}). Его ответ придёт сюда.")
 
 
 @admin_router.callback_query(F.data.startswith("tino:"))
-async def cb_decline(call: CallbackQuery, bot: Bot, db: DB):
+async def cb_decline(call: CallbackQuery, bot: Bot, db: DB, cfg: Config):
     req = db.tradein(int(call.data[5:]))
     if not req:
         await call.answer()
         return
     db.set_tradein(req["id"], "declined")
     try:
-        await bot.send_message(req["user_id"], f"К сожалению, сейчас не можем принять {html.escape(req['model'])} "
-                                               f"(заявка №{req['id']}). Спасибо, что обратились в AVIOR!")
-    except (TelegramBadRequest, TelegramForbiddenError):
+        await outbox.send(bot, cfg, req["user_id"], f"К сожалению, сейчас не можем принять "
+                                                    f"{html.escape(req['model'])} (заявка №{req['id']}). "
+                                                    "Спасибо, что обратились в AVIOR!")
+    except outbox.DeliveryError:
         pass
     await call.message.edit_reply_markup(reply_markup=None)
     await call.answer("Клиенту отправлен отказ")

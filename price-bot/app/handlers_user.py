@@ -85,11 +85,16 @@ async def notify_admins(bot: Bot, cfg: Config, text: str, markup=None) -> None:
             pass
 
 
+def person(user_id: int, name: str, username: str | None = None) -> str:
+    """Клиент в сообщениях владельцу: Telegram — ссылка на профиль, MAX — имя с пометкой."""
+    if user_id < 0:  # клиенты MAX хранятся с отрицательными id
+        return f"{html.escape(name)} · <b>MAX</b>" + (f" @{username}" if username else "")
+    who = f'<a href="tg://user?id={user_id}">{html.escape(name)}</a>'
+    return who + (f" @{username}" if username else "")
+
+
 def user_link(user) -> str:
-    who = f'<a href="tg://user?id={user.id}">{html.escape(user.full_name)}</a>'
-    if user.username:
-        who += f" @{user.username}"
-    return who
+    return person(user.id, user.full_name, user.username)
 
 
 # --- меню и каталог ---
@@ -376,9 +381,7 @@ ORDER_STATUS = {"new": "🆕 новый", "ok": "✅ подтверждён", "n
 
 
 def render_order_for_admin(db: DB, order) -> str:
-    who = f'<a href="tg://user?id={order["user_id"]}">{html.escape(order["user_name"])}</a>'
-    if order["username"]:
-        who += f" @{order['username']}"
+    who = person(order["user_id"], order["user_name"], order["username"])
     out = [
         f"🛒 <b>Заказ №{order['id']}</b>",
         f"👤 {who}",

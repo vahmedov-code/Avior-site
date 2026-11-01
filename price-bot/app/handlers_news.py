@@ -3,12 +3,14 @@ import asyncio
 import logging
 
 from aiogram import Bot, F, Router
-from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError, TelegramRetryAfter
+from aiogram.exceptions import TelegramRetryAfter
 from aiogram.filters import Command, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
+from . import outbox
+from .config import Config
 from .db import DB
 from .handlers_admin import IsAdmin
 from .handlers_used import buttons
@@ -42,7 +44,7 @@ async def cmd_send(message: Message, state: FSMContext, db: DB):
 
 @admin_router.message(StateFilter(Broadcast.content), ~F.text.startswith("/"))
 async def on_content(message: Message, state: FSMContext, bot: Bot, db: DB):
-    await state.update_data(chat_id=message.chat.id, message_id=message.message_id)
+    await state.update_data(msg=message)  # само сообщение: в MAX его текст и фото отправляются заново
     await state.set_state(Broadcast.confirm)
     await message.answer("👇 Так увидят клиенты:")
     await bot.copy_message(message.chat.id, message.chat.id, message.message_id, reply_markup=NEWS_MARKUP)
@@ -58,20 +60,20 @@ async def cb_cancel(call: CallbackQuery, state: FSMContext):
     await call.answer()
 
 
-async def deliver(bot: Bot, db: DB, admin_chat: int, chat_id: int, message_id: int) -> None:
+async def deliver(bot: Bot, db: DB, cfg: Config, admin_chat: int, message: Message) -> None:
     ok = blocked = 0
     for user_id in db.news_recipients():
         try:
-            await bot.copy_message(user_id, chat_id, message_id, reply_markup=NEWS_MARKUP)
+            await outbox.copy(bot, cfg, user_id, message, NEWS_MARKUP)
             ok += 1
         except TelegramRetryAfter as e:  # Telegram просит притормозить
             await asyncio.sleep(e.retry_after + 1)
             try:
-                await bot.copy_message(user_id, chat_id, message_id, reply_markup=NEWS_MARKUP)
+                await outbox.copy(bot, cfg, user_id, message, NEWS_MARKUP)
                 ok += 1
             except Exception:
                 blocked += 1
-        except (TelegramBadRequest, TelegramForbiddenError):
+        except outbox.DeliveryError:
             blocked += 1
             db.set_news_off(user_id)  # заблокировал бота — больше не пытаемся
         except Exception:
@@ -83,11 +85,11 @@ async def deliver(bot: Bot, db: DB, admin_chat: int, chat_id: int, message_id: i
 
 
 @admin_router.callback_query(StateFilter(Broadcast.confirm), F.data == "bcgo")
-async def cb_go(call: CallbackQuery, state: FSMContext, bot: Bot, db: DB):
+async def cb_go(call: CallbackQuery, state: FSMContext, bot: Bot, db: DB, cfg: Config):
     d = await state.get_data()
     await state.clear()
     await call.message.edit_text("📢 Рассылка началась — по окончании пришлю отчёт.")
-    task = asyncio.create_task(deliver(bot, db, call.message.chat.id, d["chat_id"], d["message_id"]))
+    task = asyncio.create_task(deliver(bot, db, cfg, call.message.chat.id, d["msg"]))
     _tasks.add(task)
     task.add_done_callback(_tasks.discard)
     await call.answer()

@@ -1,0 +1,15 @@
+[Unit]
+Description=AVIOR bot in MAX messenger
+After=network-online.target avior-bot.service
+Wants=network-online.target
+
+[Service]
+User=avior-bot
+WorkingDirectory=/opt/avior/price-bot
+ExecStart=/opt/avior/price-bot/.venv/bin/python -m app.max_bot
+Restart=always
+RestartSec=10
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target
