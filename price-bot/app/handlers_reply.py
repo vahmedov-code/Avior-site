@@ -39,7 +39,7 @@ def reply_markup(user_id: int) -> InlineKeyboardMarkup:
 async def cb_answer(call: CallbackQuery, state: FSMContext):
     await state.set_state(Answer.text)
     await state.update_data(user_id=int(call.data[4:]))
-    await call.message.answer("✍️ Напишите ответ — клиент получит его от имени бота AVIOR Shop.\n"
+    await call.message.answer("✍️ Напишите ответ — клиент получит его от имени бота AVIOR.\n"
                               "Можно текст или фото с подписью.",
                               reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
                                   InlineKeyboardButton(text="✖ Отмена", callback_data="ansx")]]))

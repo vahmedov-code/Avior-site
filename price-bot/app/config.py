@@ -72,7 +72,7 @@ class Config:
         return cls(
             bot_token=token,
             admin_ids=admins,
-            shop_name=os.getenv("SHOP_NAME", "AVIOR Shop"),
+            shop_name=os.getenv("SHOP_NAME", "AVIOR"),
             welcome_text=_text("WELCOME_TEXT", "Оригинальная техника Apple и не только.\nАктуальные цены, гарантия. Доставка курьером по Москве, СДЭК и Ozon.\n\n"
                                  "🕚 Цены обновляются каждый день с 11:00 до 12:00 (МСК)."),
             contacts_text=_text("CONTACTS_TEXT", DEFAULT_CONTACTS),
