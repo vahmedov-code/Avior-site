@@ -84,7 +84,7 @@ async def cmd_links(message: Message, command: CommandObject, bot: Bot, db: DB):
              "Ставьте нужную ссылку в каждом месте — в /stats будет видно, откуда пришли клиенты.", ""]
     for code, title in sources.SOURCES.items():
         lines.append(f"{title}\n<code>{sources.link(username, code)}</code>")
-    lines += ["", "Своя метка: <code>/links instagram</code> — ссылка и QR-код с меткой «instagram».",
+    lines += ["", "Своя метка: <code>/links vk</code> — ссылка и QR-код с любой меткой латиницей.",
               "Б/у из канала метятся автоматически. QR-коды для печати — кнопками ниже."]
     rows, row = [], []
     for code, title in sources.SOURCES.items():

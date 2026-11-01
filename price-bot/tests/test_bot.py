@@ -660,7 +660,7 @@ def test_all_users_list():
 def test_sources_first_visit_only():
     from app.sources import clean, label
     assert clean("Avito") == "avito" and clean("bu12") is None and clean("a b") is None
-    assert label(None).startswith("без метки") and label("instagram") == "🏷 instagram"
+    assert label(None).startswith("без метки") and label("vk") == "🏷 vk" and label("instagram") == "📸 Instagram"
     db = DB(":memory:")
     db.track_visit(1, None, "Новый", "2026-10-31")
     db.set_source_if_new(1, "avito")

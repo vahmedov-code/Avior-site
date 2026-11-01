@@ -17,6 +17,9 @@ SOURCES = {
     "yandex": "🗺 Яндекс Карты",
     "2gis": "🗺 2ГИС",
     "channel": "📢 Telegram-канал",
+    "instagram": "📸 Instagram",
+    "whatsapp": "💚 WhatsApp",
+    "max": "🔵 MAX",
 }
 # Telegram разрешает в start-параметре латиницу, цифры, _ и -; bu12 — ссылка на карточку б/у, не метка
 SOURCE_RE = re.compile(r"(?!bu\d+$)[A-Za-z0-9_-]{1,32}")
