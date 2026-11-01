@@ -10,6 +10,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardButton, InlineKeyboardMarkup, Message
 
 from . import sources
+from .config import Config
 from .db import DB
 from .handlers_admin import IsAdmin
 
@@ -74,18 +75,22 @@ async def on_answer(message: Message, state: FSMContext, bot: Bot):
 # --- ссылки с метками ---
 
 @admin_router.message(Command("links"))
-async def cmd_links(message: Message, command: CommandObject, bot: Bot, db: DB):
-    username = (await bot.me()).username
+async def cmd_links(message: Message, command: CommandObject, bot: Bot, db: DB, cfg: Config):
+    main = (await bot.me()).username
+    short = cfg.link_username or main  # красивый адрес — для соцсетей, где ссылку легко поправить
     custom = sources.clean((command.args or "").strip())
-    if custom:  # /links instagram — своя метка
-        await send_qr(message, username, custom)
+    if custom:  # /links ozon — своя метка
+        await send_qr(message, main, short, custom)
         return
     lines = ["🔗 <b>Ссылки на бота с метками</b>",
              "Ставьте нужную ссылку в каждом месте — в /stats будет видно, откуда пришли клиенты.", ""]
     for code, title in sources.SOURCES.items():
-        lines.append(f"{title}\n<code>{sources.link(username, code)}</code>")
+        lines.append(f"{title}\n<code>{sources.link(short, code)}</code>")
     lines += ["", "Своя метка: <code>/links ozon</code> — ссылка и QR-код с любой меткой латиницей.",
               "Б/у из канала метятся автоматически. QR-коды для печати — кнопками ниже."]
+    if short != main:
+        lines.append(f"\n<i>Ссылки через @{short} работают, пока активна подписка Telegram Premium. "
+                     f"QR-коды для печати поэтому ведут на постоянный адрес @{main}.</i>")
     rows, row = [], []
     for code, title in sources.SOURCES.items():
         row.append(InlineKeyboardButton(text=f"QR: {title.split(' ', 1)[1][:18]}", callback_data=f"qr:{code}"))
@@ -97,17 +102,20 @@ async def cmd_links(message: Message, command: CommandObject, bot: Bot, db: DB):
     await message.answer("\n".join(lines), reply_markup=InlineKeyboardMarkup(inline_keyboard=rows))
 
 
-async def send_qr(message: Message, username: str, code: str) -> None:
-    url = sources.link(username, code)
+async def send_qr(message: Message, main: str, short: str, code: str) -> None:
+    """QR — всегда на постоянный адрес бота: напечатанное уже не поправить, если Premium-адрес отключится."""
+    url = sources.link(main, code)
+    extra = f"\nДля соцсетей: <code>{sources.link(short, code)}</code>" if short != main else ""
     await message.answer_photo(BufferedInputFile(sources.qr_png(url), filename=f"avior-{code}.png"),
-                               caption=f"{html.escape(sources.label(code))}\n<code>{url}</code>\n\n"
+                               caption=f"{html.escape(sources.label(code))}\n<code>{url}</code>{extra}\n\n"
                                        "Распечатайте или вставьте в макет — клиенты, пришедшие по этому коду, "
                                        "будут видны в /stats.")
 
 
 @admin_router.callback_query(F.data.startswith("qr:"))
-async def cb_qr(call: CallbackQuery, bot: Bot):
+async def cb_qr(call: CallbackQuery, bot: Bot, cfg: Config):
     code = sources.clean(call.data[3:])
     if code:
-        await send_qr(call.message, (await bot.me()).username, code)
+        main = (await bot.me()).username
+        await send_qr(call.message, main, cfg.link_username or main, code)
     await call.answer()

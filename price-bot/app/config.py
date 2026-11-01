@@ -57,6 +57,7 @@ class Config:
     used_note: str = DEFAULT_USED_NOTE
     services: tuple[str, ...] = tuple(DEFAULT_SERVICES.split(","))
     crm_api_url: str = "https://cms.avior.moscow/api"
+    link_username: str = ""  # дополнительный (Premium) адрес бота для красивых ссылок, напр. avior_app
     crm_lead_secret: str = ""
 
     @classmethod
@@ -86,6 +87,7 @@ class Config:
                 o.strip() for o in os.getenv("DELIVERY_OPTIONS", DEFAULT_DELIVERY).split(",") if o.strip()
             ),
             used_note=_text("USED_NOTE", DEFAULT_USED_NOTE),
+            link_username=os.getenv("LINK_USERNAME", "").strip().lstrip("@"),
             crm_api_url=os.getenv("CRM_API_URL", "https://cms.avior.moscow/api").rstrip("/"),
             crm_lead_secret=os.getenv("CRM_LEAD_SECRET", "").strip(),
             services=tuple(x.strip() for x in os.getenv("SERVICES", DEFAULT_SERVICES).split(",") if x.strip()),
