@@ -20,6 +20,7 @@ SOURCES = {
     "instagram": "📸 Instagram",
     "whatsapp": "💚 WhatsApp",
     "max": "🔵 MAX",
+    "vk": "🔷 ВКонтакте",
 }
 # Telegram разрешает в start-параметре латиницу, цифры, _ и -; bu12 — ссылка на карточку б/у, не метка
 SOURCE_RE = re.compile(r"(?!bu\d+$)[A-Za-z0-9_-]{1,32}")
