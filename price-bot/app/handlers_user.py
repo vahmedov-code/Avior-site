@@ -1,4 +1,5 @@
 import html
+import logging
 import re
 from datetime import datetime
 from zoneinfo import ZoneInfo
@@ -10,6 +11,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
+from . import emoji
 from . import keyboards as kb
 from . import sources
 from .config import Config
@@ -18,6 +20,7 @@ from .pricing import fmt_price
 from .stats import is_customer, today
 
 router = Router(name="user")
+log = logging.getLogger(__name__)
 
 PAGE_SIZE = 25
 
@@ -54,6 +57,31 @@ def welcome(cfg: Config) -> str:
 
 def main_menu(db: DB, user_id: int, cfg: Config):
     return kb.start_menu(db.cart_count(user_id))
+
+
+async def send_start(message: Message, db: DB, cfg: Config, user_id: int) -> None:
+    """Приветствие с меню; с анимированными значками, если владелец их задал командой /emoji."""
+    text, mk = welcome(cfg), main_menu(db, user_id, cfg)
+    m = emoji.emoji_map(db)
+    if m:
+        try:
+            await message.answer(emoji.animate_text(text, m), reply_markup=emoji.animate_markup(mk, m))
+            return
+        except TelegramBadRequest:  # например, закончилась подписка Premium — показываем обычные значки
+            log.warning("Анимированные значки не приняты Telegram", exc_info=True)
+    await message.answer(text, reply_markup=mk)
+
+
+async def edit_start(call: CallbackQuery, db: DB, cfg: Config) -> None:
+    text, mk = welcome(cfg), main_menu(db, call.from_user.id, cfg)
+    m = emoji.emoji_map(db)
+    if m:
+        try:
+            await safe_edit(call, emoji.animate_text(text, m), emoji.animate_markup(mk, m))
+            return
+        except TelegramBadRequest:
+            log.warning("Анимированные значки не приняты Telegram", exc_info=True)
+    await safe_edit(call, text, mk)
 
 
 def catalog_text(cfg: Config) -> str:
@@ -105,13 +133,13 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext,
     source = sources.clean(command.args)  # t.me/бот?start=avito — откуда пришёл клиент
     if source:
         db.set_source_if_new(message.from_user.id, source)
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))
+    await send_start(message, db, cfg, message.from_user.id)
 
 
 @router.callback_query(F.data == "home")
 async def cb_home(call: CallbackQuery, state: FSMContext, db: DB, cfg: Config):
     await state.clear()
-    await safe_edit(call, welcome(cfg), main_menu(db, call.from_user.id, cfg))
+    await edit_start(call, db, cfg)
     await call.answer()
 
 
@@ -343,7 +371,7 @@ async def cb_services_done(call: CallbackQuery, state: FSMContext):
 async def checkout_cancel(message: Message, state: FSMContext, db: DB, cfg: Config):
     await state.clear()
     await message.answer("Оформление отменено, корзина сохранена.", reply_markup=ReplyKeyboardRemove())
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))
+    await send_start(message, db, cfg, message.from_user.id)
 
 
 @router.message(StateFilter(Checkout.phone), F.contact | F.text)
@@ -374,7 +402,7 @@ async def checkout_phone(message: Message, state: FSMContext, bot: Bot, db: DB, 
         + "\nМы скоро свяжемся с вами для подтверждения.",
         reply_markup=ReplyKeyboardRemove(),
     )
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, user.id, cfg))
+    await send_start(message, db, cfg, user.id)
 
 
 ORDER_STATUS = {"new": "🆕 новый", "ok": "✅ подтверждён", "no": "❌ отменён"}
@@ -426,4 +454,4 @@ async def lead_text(message: Message, state: FSMContext, bot: Bot, db: DB, cfg: 
                         reply_markup(message.from_user.id))
     await state.clear()
     await message.answer("✅ Спасибо! Вопрос отправлен, скоро ответим.")
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))
+    await send_start(message, db, cfg, message.from_user.id)

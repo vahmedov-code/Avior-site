@@ -17,7 +17,7 @@ from .config import Config
 from .db import DB
 from .handlers_admin import IsAdmin
 from .handlers_used import CONDITIONS, buttons, parse_battery
-from .handlers_user import main_menu, notify_admins, user_link, welcome
+from .handlers_user import notify_admins, send_start, user_link
 
 router = Router(name="tradein")
 admin_router = Router(name="tradein_admin")
@@ -143,7 +143,7 @@ async def cb_photos_done(call: CallbackQuery, state: FSMContext):
 async def on_phone_cancel(message: Message, state: FSMContext, db: DB, cfg: Config):
     await state.clear()
     await message.answer("Заявка отменена.", reply_markup=ReplyKeyboardRemove())
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))
+    await send_start(message, db, cfg, message.from_user.id)
 
 
 @router.message(StateFilter(TradeIn.phone), F.contact | F.text)
@@ -172,7 +172,7 @@ async def on_phone(message: Message, state: FSMContext, bot: Bot, db: DB, cfg: C
             pass
     await message.answer(f"✅ Заявка №{req_id} отправлена! Мастер оценит устройство и напишет сюда, "
                          "обычно в течение рабочего дня.", reply_markup=ReplyKeyboardRemove())
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, user.id, cfg))
+    await send_start(message, db, cfg, user.id)
 
 
 # --- владелец: оценка ---

@@ -757,3 +757,18 @@ def test_max_bot_order_flow():
     texts = [(b or {}).get("text") or ((b or {}).get("message") or {}).get("text") or "" for _, _, b in sent]
     assert any("Заказ №1 оформлен" in t for t in texts)
     assert all(q.get("user_id") in (None, "77") for p, q, _ in sent if p == "/messages")
+
+
+def test_animated_start_emoji():
+    from app import emoji
+    from app.keyboards import start_menu
+    db = DB(":memory:")
+    assert emoji.emoji_map(db) == {}
+    emoji.save(db, [f"id{i}" for i in range(len(emoji.START_EMOJI))])
+    m = emoji.emoji_map(db)
+    assert emoji.animate_text("👋 Привет, 🔧 ремонт", m) == (
+        '<tg-emoji emoji-id="id0">👋</tg-emoji> Привет, <tg-emoji emoji-id="id2">🔧</tg-emoji> ремонт')
+    buttons = [(b.text, b.icon_custom_emoji_id) for r in emoji.animate_markup(start_menu(0), m).inline_keyboard for b in r]
+    assert buttons[:3] == [("Каталог устройств", "id1"), ("Ремонт", "id2"), ("Трейд-ин", "id3")]
+    emoji.save(db, None)
+    assert emoji.emoji_map(db) == {}

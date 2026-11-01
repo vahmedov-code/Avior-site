@@ -26,7 +26,7 @@ from .db import DB
 from .handlers_admin import IsAdmin
 from .handlers_reply import reply_markup
 from .handlers_used import buttons
-from .handlers_user import main_menu, notify_admins, safe_edit, user_link, welcome
+from .handlers_user import notify_admins, safe_edit, send_start, user_link
 
 router = Router(name="repair")
 admin_router = Router(name="repair_admin")
@@ -136,7 +136,7 @@ async def on_problem(message: Message, state: FSMContext):
 async def on_book_cancel(message: Message, state: FSMContext, db: DB, cfg: Config):
     await state.clear()
     await message.answer("Отменено.", reply_markup=ReplyKeyboardRemove())
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))
+    await send_start(message, db, cfg, message.from_user.id)
 
 
 @router.message(StateFilter(RepairBook.phone), F.contact | F.text)
@@ -157,7 +157,7 @@ async def on_book_phone(message: Message, state: FSMContext, bot: Bot, db: DB, c
                                   f"{html.escape(d['problem'])}\n\n{crm}", reply_markup(user.id))
     await message.answer("✅ Заявка принята! Мастер перезвонит, подскажет цену и сроки.\n"
                          "📍 Москва, Можайское ш., 4к1", reply_markup=ReplyKeyboardRemove())
-    await message.answer(welcome(cfg), reply_markup=main_menu(db, message.from_user.id, cfg))
+    await send_start(message, db, cfg, message.from_user.id)
 
 
 # --- статус для клиента ---

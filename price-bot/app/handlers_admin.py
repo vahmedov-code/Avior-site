@@ -13,6 +13,7 @@ from aiogram.types import (BufferedInputFile, CallbackQuery, InlineKeyboardMarku
                            TelegramObject)
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from . import emoji
 from . import keyboards as kb
 from . import outbox
 from .alerts import send_price_alerts
@@ -22,7 +23,7 @@ from .catalog_import import (catalog_filters, create_category, exclude_words, im
                              set_skip_categories, skip_categories)
 from .config import Config
 from .db import DB, ImportDiff
-from .handlers_user import ORDER_STATUS, render_order_for_admin
+from .handlers_user import ORDER_STATUS, render_order_for_admin, send_start
 from .excel import build_xlsx
 from .parser import count_items, parse_post
 from .pricing import apply_markup, fmt_price
@@ -72,6 +73,7 @@ HELP = """<b>Управление ботом</b>
 
 <b>Статистика</b>
 /stats — сколько людей заходило, откуда пришли, заказы, популярные категории
+/emoji — анимированные значки на первой странице (нужен Telegram Premium у владельца)
 /links — ссылки на бота с метками (сайт, Авито, QR в сервисе…) и QR-коды для печати
 
 <b>Заказы</b>
@@ -572,6 +574,40 @@ async def cb_delcat(call: CallbackQuery, db: DB):
             if row[0].callback_data != call.data]
     await call.message.edit_reply_markup(reply_markup=InlineKeyboardMarkup(inline_keyboard=rows) if rows else None)
     await call.answer(f"Удалено: {cat['title']}" if cat else "Уже удалено")
+
+
+class EmojiSet(StatesGroup):
+    wait = State()
+
+
+@router.message(Command("emoji"))
+async def cmd_emoji(message: Message, command: CommandObject, state: FSMContext, db: DB):
+    if (command.args or "").strip() == "off":
+        emoji.save(db, None)
+        await message.answer("Анимированные значки выключены — на первой странице обычные эмодзи.")
+        return
+    await state.set_state(EmojiSet.wait)
+    await message.answer(
+        "✨ <b>Анимированные значки на первой странице</b>\n\n"
+        f"Пришлите одним сообщением {len(emoji.START_EMOJI)} анимированных эмодзи по порядку — замены для:\n"
+        f"{' '.join(emoji.START_EMOJI)}\n\n"
+        "Выбирайте их в панели эмодзи из премиум-наборов (анимированные). Работает, пока у владельца бота "
+        "есть Telegram Premium. /emoji off — вернуть обычные значки.")
+
+
+@router.message(StateFilter(EmojiSet.wait), ~F.text.startswith("/"))
+async def on_emoji(message: Message, state: FSMContext, db: DB, cfg: Config):
+    ids = [e.custom_emoji_id for e in (message.entities or []) if e.type == "custom_emoji"]
+    need = len(emoji.START_EMOJI)
+    if len(ids) != need:
+        await message.answer(f"Нашёл анимированных значков: {len(ids)}, а нужно {need} — по одному на "
+                             f"{' '.join(emoji.START_EMOJI)}. Обычные эмодзи не подходят, нужны из премиум-наборов. "
+                             "Пришлите ещё раз.")
+        return
+    await state.clear()
+    emoji.save(db, ids)
+    await message.answer("✅ Готово! Так теперь выглядит первая страница:")
+    await send_start(message, db, cfg, message.from_user.id)
 
 
 @router.message(Command("stats"))
