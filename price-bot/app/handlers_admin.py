@@ -582,9 +582,18 @@ class EmojiSet(StatesGroup):
 
 @router.message(Command("emoji"))
 async def cmd_emoji(message: Message, command: CommandObject, state: FSMContext, db: DB):
-    if (command.args or "").strip() == "off":
+    args = (command.args or "").strip()
+    if args == "off":
         emoji.save(db, None)
         await message.answer("Анимированные значки выключены — везде обычные эмодзи.")
+        return
+    if args.startswith("del"):  # /emoji del 😳 — убрать отдельные замены
+        current = emoji.emoji_map(db)
+        removed = [k for k in list(current) if k in emoji.base(args[3:])]
+        for k in removed:
+            del current[k]
+        emoji.save(db, current)
+        await message.answer(f"Убрано замен: {len(removed)}. Осталось: {len(current)}.")
         return
     await state.set_state(EmojiSet.wait)
     current = emoji.emoji_map(db)
@@ -596,7 +605,18 @@ async def cmd_emoji(message: Message, command: CommandObject, state: FSMContext,
         "Например: 🏠🏠 📍📍 📞📞 (вторым в каждой паре — анимированный)\n\n"
         f"Значки бота: {emoji.COMMON}\n"
         f"Уже анимированы: {done}\n\n"
-        "Нужен Telegram Premium у владельца бота. /emoji off — убрать все замены.")
+        "Нужен Telegram Premium у владельца бота. /emoji del 😳 — убрать отдельный значок, "
+        "/emoji off — убрать все замены."
+        + emoji_problem(db))
+
+
+def emoji_problem(db: DB) -> str:
+    error = db.get_setting(emoji.ERROR_SETTING)
+    if not error:
+        return ""
+    return ("\n\n⚠️ <b>Telegram не принимает анимированные значки</b>, клиенты видят обычные.\n"
+            f"Ответ Telegram: <code>{html.escape(error)}</code>\n"
+            "Чаще всего причина — у аккаунта, который создал бота в @BotFather, нет Telegram Premium.")
 
 
 @router.message(StateFilter(EmojiSet.wait), ~F.text.startswith("/"))
@@ -613,6 +633,9 @@ async def on_emoji(message: Message, state: FSMContext, db: DB, cfg: Config):
     await message.answer(f"✅ Добавлено замен: {len(found)} ({' '.join(found)}). Всего: {len(current)}.\n"
                          "Так теперь выглядит первая страница:")
     await send_start(message, db, cfg, message.from_user.id)
+    problem = emoji_problem(db)  # первая страница только что ушла — знаем, принял ли Telegram значки
+    if problem:
+        await message.answer(problem.strip())
 
 
 @router.message(Command("stats"))

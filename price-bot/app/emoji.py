@@ -19,6 +19,7 @@ from .db import DB
 
 log = logging.getLogger(__name__)
 SETTING = "custom_emoji"
+ERROR_SETTING = "custom_emoji_error"  # что ответил Telegram, когда последний раз не принял значки
 VS16 = "️"  # «вариант эмодзи» после некоторых значков (⬅️, ♻️)
 # Подсказка в /emoji: значки, которые чаще всего видят клиенты
 COMMON = "👋 🛍 🔧 💰 💬 📞 🏠 📍 🚚 📝 🔎 🛒 🔍 ♻️ ⬅️ ✅ ❌ 📦 🕘 🔋 ✨ 📱 💻"
@@ -114,7 +115,18 @@ class EmojiMiddleware(BaseRequestMiddleware):
         if changed is None:
             return await make_request(bot, method)
         try:
-            return await make_request(bot, changed)
+            result = await make_request(bot, changed)
         except TelegramBadRequest as e:
-            log.info("Анимированные значки не приняты (%s) — отправляю с обычными", e.message[:100])
+            log.warning("Анимированные значки не приняты (%s) — отправляю с обычными", e.message[:200])
+            self.remember(e.message[:300])
             return await make_request(bot, method)
+        self.remember("")
+        return result
+
+    def remember(self, error: str) -> None:
+        """Причину отказа показывает владельцу /emoji; пишем в базу, только когда она меняется."""
+        try:
+            if (self.db.get_setting(ERROR_SETTING) or "") != error:
+                self.db.set_setting(ERROR_SETTING, error)
+        except Exception:
+            pass
