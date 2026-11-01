@@ -122,7 +122,9 @@ async def cb_catalog(call: CallbackQuery, state: FSMContext, db: DB, cfg: Config
 
 @router.callback_query(F.data == "contacts")
 async def cb_contacts(call: CallbackQuery, cfg: Config):
-    await safe_edit(call, f"<b>{html.escape(cfg.shop_name)}</b>\n\n{html.escape(cfg.contacts_text)}", kb.back_home())
+    # вопросы — прямо в боте: личный Telegram в контактах не показываем
+    await safe_edit(call, f"<b>{html.escape(cfg.shop_name)}</b>\n\n{html.escape(cfg.contacts_text)}",
+                    kb.InlineKeyboardMarkup(inline_keyboard=[[kb.BTN_QUESTION], [kb.BTN_HOME]]))
     await call.answer()
 
 

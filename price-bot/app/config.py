@@ -8,8 +8,7 @@ from .rules import DEFAULT_ACCESSORY_WORDS, DEFAULT_EXCLUDE_WORDS
 
 DEFAULT_CONTACTS = (
     "📍 Москва, Можайское шоссе, 4к1\n"
-    "📞 +7 (901) 222-81-11\n"
-    "💬 Telegram: @ghost0590\n\n"
+    "📞 +7 (901) 222-81-11\n\n"
     "🚚 Доставка:\n"
     "• курьером по Москве\n"
     "• СДЭК\n"
