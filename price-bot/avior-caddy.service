@@ -1,0 +1,14 @@
+[Unit]
+Description=Caddy: HTTPS for the AVIOR WhatsApp bot webhook
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/usr/local/bin/caddy run --config /etc/caddy/Caddyfile --adapter caddyfile
+ExecReload=/usr/local/bin/caddy reload --config /etc/caddy/Caddyfile --adapter caddyfile
+Environment=XDG_DATA_HOME=/var/lib/caddy XDG_CONFIG_HOME=/etc/caddy
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
