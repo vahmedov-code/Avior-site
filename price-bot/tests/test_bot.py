@@ -779,3 +779,78 @@ def test_animated_emoji():
     assert (home.text, home.icon_custom_emoji_id) == ("В меню", "home")
     buttons = [(b.text, b.icon_custom_emoji_id) for r in emoji.animate_markup(start_menu(0), m).inline_keyboard for b in r]
     assert buttons[-1] == ("Контакты и доставка", "phone") and buttons[0] == ("🛍 Каталог устройств", None)
+
+
+def test_whatsapp_helpers():
+    import hashlib
+    import hmac
+    from app.platforms import MAX, TELEGRAM, WHATSAPP, platform, wa_phone, wa_uid
+    from app.wa_api import html_to_wa, verify_signature
+    assert html_to_wa('<b>Итого</b> <i>a &amp; b</i> <s>старая</s> <a href="https://avior.moscow">сайт</a>') == \
+        "*Итого* _a & b_ ~старая~ сайт (https://avior.moscow)"
+    assert html_to_wa('<a href="tg://user?id=1">Анна</a> <tg-emoji emoji-id="5">🔧</tg-emoji>') == "Анна 🔧"
+    body = b'{"entry": []}'
+    sig = "sha256=" + hmac.new(b"secret", body, hashlib.sha256).hexdigest()
+    assert verify_signature("secret", body, sig) and not verify_signature("secret", body, "sha256=00")
+    uid = wa_uid("79001234567")
+    assert platform(uid) == WHATSAPP and wa_phone(uid) == "79001234567"
+    assert platform(-500) == MAX and platform(500) == TELEGRAM
+
+
+def test_whatsapp_order_flow():
+    """Клиент WhatsApp: поиск → выбор товара → оформление; телефон — номер WhatsApp."""
+    import asyncio
+    from dataclasses import replace
+    from aiohttp import web
+    from app.config import Config
+    from app.parser import Section
+    from app.wa_api import WaApi
+    from app.wa_bot import WaBot
+
+    sent, admin = [], []
+
+    class FakeTelegram:
+        async def send_message(self, chat_id, text, reply_markup=None):
+            admin.append(text)
+
+    async def graph(request):
+        if request.path.endswith("/messages"):
+            sent.append(await request.json())
+        return web.json_response({"messages": [{"id": "wamid"}]})
+
+    async def run():
+        app = web.Application()
+        app.router.add_route("*", "/{tail:.*}", graph)
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, "127.0.0.1", 0)
+        await site.start()
+        port = site._server.sockets[0].getsockname()[1]
+        cfg = replace(Config.from_env(for_bot=False), admin_ids=frozenset({1}))
+        db = DB(":memory:")
+        db.set_setting("markup_pct", 0)
+        db.set_setting("markup_fixed", 0)
+        c = db.add_category("Аксессуары")
+        db.replace_items(c, [Section("Стекла", [Item("Стекло 15 Pro", 1500, "")])])
+        api = WaApi("T", "PHONE", base=f"http://127.0.0.1:{port}")
+        bot = WaBot(api, FakeTelegram(), db, cfg)
+
+        def act(i):
+            return {"id": "m", "type": "interactive", "interactive": {"type": "list_reply", "list_reply": {"id": i}}}
+        try:
+            for msg in ({"id": "m", "type": "text", "text": {"body": "Привет"}},
+                        {"id": "m", "type": "text", "text": {"body": "стекло 15 про"}},
+                        act("fa:1"), act("checkout"), act("d:0")):
+                await bot.process("79001234567", "Ирина", msg)
+        finally:
+            await api.close()
+            await runner.cleanup()
+        return db
+
+    db = asyncio.run(run())
+    [order] = db.recent_orders()
+    assert (order["user_id"], order["phone"], order["total"]) == (-(10 ** 16 + 79001234567), "+79001234567", 1500)
+    assert any("Заказ №1" in t and "WhatsApp" in t for t in admin)
+    replies = [m for m in sent if m.get("type") == "interactive"]
+    assert replies[1]["interactive"]["action"]["sections"][0]["rows"][0]["id"] == "fa:1"  # найденный товар
+    assert all(m.get("to") in (None, "79001234567") for m in sent)

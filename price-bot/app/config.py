@@ -60,6 +60,12 @@ class Config:
     max_token: str = ""                      # токен бота MAX (business.max.ru)
     max_api_url: str = "https://platform-api2.max.ru"
     max_ca_file: str = ""                    # сертификат НУЦ Минцифры, если система его не знает
+    wa_token: str = ""                       # WhatsApp Cloud API (Meta): постоянный токен
+    wa_phone_id: str = ""                    # Phone number ID из раздела WhatsApp → API Setup
+    wa_verify_token: str = ""                # придуманное слово для проверки адреса webhook
+    wa_app_secret: str = ""                  # App secret приложения — проверка подписи запросов Meta
+    wa_api_version: str = "v24.0"
+    wa_port: int = 8081
     link_username: str = ""  # дополнительный (Premium) адрес бота для красивых ссылок, напр. avior_app
     crm_lead_secret: str = ""
 
@@ -93,6 +99,12 @@ class Config:
             max_token=os.getenv("MAX_TOKEN", "").strip(),
             max_api_url=os.getenv("MAX_API_URL", "https://platform-api2.max.ru").strip().rstrip("/"),
             max_ca_file=os.getenv("MAX_CA_FILE", "").strip(),
+            wa_token=os.getenv("WA_TOKEN", "").strip(),
+            wa_phone_id=os.getenv("WA_PHONE_ID", "").strip(),
+            wa_verify_token=os.getenv("WA_VERIFY_TOKEN", "").strip(),
+            wa_app_secret=os.getenv("WA_APP_SECRET", "").strip(),
+            wa_api_version=os.getenv("WA_API_VERSION", "v24.0").strip(),
+            wa_port=int(os.getenv("WA_PORT", "8081")),
             link_username=os.getenv("LINK_USERNAME", "").strip().lstrip("@"),
             crm_api_url=os.getenv("CRM_API_URL", "https://cms.avior.moscow/api").rstrip("/"),
             crm_lead_secret=os.getenv("CRM_LEAD_SECRET", "").strip(),

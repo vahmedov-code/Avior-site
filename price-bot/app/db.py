@@ -5,6 +5,7 @@ import time
 from dataclasses import dataclass
 
 from .parser import Section
+from .platforms import WA_BASE
 from .pricing import apply_markup
 
 SCHEMA = """
@@ -632,11 +633,11 @@ class DB:
             self.conn.execute("INSERT OR REPLACE INTO max_photos(tg_file_id, payload) VALUES(?, ?)",
                               (tg_file_id, json.dumps(payload)))
 
-    def platform_counts(self) -> tuple[int, int]:
-        """(клиентов Telegram, клиентов MAX)."""
-        tg, mx = self.conn.execute(
-            "SELECT COALESCE(SUM(user_id > 0), 0), COALESCE(SUM(user_id < 0), 0) FROM visitors").fetchone()
-        return tg, mx
+    def platform_counts(self) -> tuple[int, int, int]:
+        """(клиентов Telegram, MAX, WhatsApp) — см. app/platforms.py."""
+        return tuple(self.conn.execute(
+            "SELECT COALESCE(SUM(user_id > 0), 0), COALESCE(SUM(user_id < 0 AND user_id > ?), 0), "
+            "COALESCE(SUM(user_id <= ?), 0) FROM visitors", (-WA_BASE, -WA_BASE)).fetchone())
 
     # --- статистика ---
     def track_visit(self, user_id: int, username: str | None, full_name: str, day: str) -> None:

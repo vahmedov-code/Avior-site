@@ -92,6 +92,24 @@
 2. `sudo -u avior-bot .venv/bin/python manage.py max-check` — проверка связи и токена.
 3. `cp avior-max.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now avior-max`
 
+## Бот в WhatsApp (упрощённый)
+
+Служба `avior-wa` с той же общей базой, через официальный WhatsApp Cloud API (Meta). Меню — списком,
+каталог — через поиск по модели (WhatsApp позволяет до 3 кнопок или список до 10 пунктов), б/у — карточкой с фото,
+заказ (телефон — номер WhatsApp клиента), запись на ремонт в CRM и статус из CRM, трейд-ин с фото, вопрос мастеру.
+Управление — в Telegram: всё из WhatsApp приходит владельцу с пометкой «WhatsApp», ответы уходят клиенту в WhatsApp.
+
+Ограничение WhatsApp: написать клиенту первым можно только в течение 24 часов после его последнего сообщения
+(дальше — только платными шаблонами Meta). Поэтому статус заказа или ремонта, отправленный позже, может не дойти —
+владелец увидит «не доставлено» и позвонит.
+
+Подключение:
+1. Поддомен (например, `wa.avior.moscow`) → A-запись на IP сервера бота; HTTPS — Caddy (`Caddyfile.example`).
+2. developers.facebook.com: приложение типа «Бизнес» → продукт WhatsApp → API Setup (WA_PHONE_ID, токен);
+   Configuration → Webhook: `https://wa.avior.moscow/whatsapp`, Verify token = WA_VERIFY_TOKEN, подписка `messages`.
+3. `.env`: WA_TOKEN, WA_PHONE_ID, WA_VERIFY_TOKEN, WA_APP_SECRET.
+4. `cp avior-wa.service /etc/systemd/system/ && systemctl daemon-reload && systemctl enable --now avior-wa`
+
 ## Весь прайс одним файлом (экспорт группы)
 
 1. В **Telegram Desktop** откройте группу поставщика → ⋮ → **Экспорт истории чата**.

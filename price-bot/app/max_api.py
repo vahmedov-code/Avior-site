@@ -12,6 +12,8 @@ import ssl
 import aiohttp
 from aiogram.types import InlineKeyboardMarkup
 
+from .platforms import MAX, platform
+
 log = logging.getLogger(__name__)
 TIMEOUT = aiohttp.ClientTimeout(total=40)
 UPLOAD_TIMEOUT = aiohttp.ClientTimeout(total=120)
@@ -37,7 +39,7 @@ def to_max(user_id: int) -> int:
 
 
 def is_max_user(user_id: int) -> bool:
-    return user_id < 0
+    return platform(user_id) == MAX
 
 
 def buttons_from_markup(markup: InlineKeyboardMarkup | None) -> list[list[dict]]:

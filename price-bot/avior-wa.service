@@ -1,0 +1,15 @@
+[Unit]
+Description=AVIOR bot in WhatsApp (Cloud API webhook on 127.0.0.1:8081)
+After=network-online.target avior-bot.service
+Wants=network-online.target
+
+[Service]
+User=avior-bot
+WorkingDirectory=/opt/avior/price-bot
+ExecStart=/opt/avior/price-bot/.venv/bin/python -m app.wa_bot
+Restart=always
+RestartSec=10
+MemoryMax=1G
+
+[Install]
+WantedBy=multi-user.target

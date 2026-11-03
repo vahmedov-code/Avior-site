@@ -11,7 +11,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 
 from . import keyboards as kb
-from . import sources
+from . import platforms, sources
 from .config import Config
 from .db import DB, CartLine
 from .pricing import fmt_price
@@ -96,7 +96,10 @@ async def notify_admins(bot: Bot, cfg: Config, text: str, markup=None) -> None:
 
 def person(user_id: int, name: str, username: str | None = None) -> str:
     """Клиент в сообщениях владельцу: Telegram — ссылка на профиль, MAX — имя с пометкой."""
-    if user_id < 0:  # клиенты MAX хранятся с отрицательными id
+    where = platforms.platform(user_id)
+    if where == platforms.WHATSAPP:
+        return f"{html.escape(name)} · <b>WhatsApp</b> +{platforms.wa_phone(user_id)}"
+    if where == platforms.MAX:
         return f"{html.escape(name)} · <b>MAX</b>" + (f" @{username}" if username else "")
     who = f'<a href="tg://user?id={user_id}">{html.escape(name)}</a>'
     return who + (f" @{username}" if username else "")

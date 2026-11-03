@@ -1,0 +1,7 @@
+# HTTPS для бота WhatsApp: Meta присылает сообщения только на https-адрес.
+# Caddy сам получает и продлевает сертификат Let's Encrypt.
+# Замените wa.avior.moscow на свой поддомен (A-запись в DNS → IP этого сервера).
+wa.avior.moscow {
+	reverse_proxy /whatsapp 127.0.0.1:8081
+	respond 404
+}
