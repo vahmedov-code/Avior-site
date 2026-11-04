@@ -854,3 +854,17 @@ def test_whatsapp_order_flow():
     replies = [m for m in sent if m.get("type") == "interactive"]
     assert replies[1]["interactive"]["action"]["sections"][0]["rows"][0]["id"] == "fa:1"  # найденный товар
     assert all(m.get("to") in (None, "79001234567") for m in sent)
+
+
+def test_maintenance_reminders():
+    import time
+    from app.reminders import reminder_text
+    db = DB(":memory:")
+    rid = db.add_reminder_draft(7, "555", "Ноутбук ASUS TUF")
+    assert db.reminder(rid)["status"] == "draft" and db.due_reminders(int(time.time()) + 10 ** 9) == []
+    due = db.plan_reminder(rid, 12)
+    assert abs(due - (time.time() + 360 * 86400)) < 5
+    assert db.due_reminders(int(time.time())) == [] and len(db.due_reminders(due)) == 1
+    assert "12 мес." in reminder_text(db.reminder(rid)) and "Ноутбук ASUS TUF" in reminder_text(db.reminder(rid))
+    db.set_reminder_status(rid, "sent")
+    assert db.planned_reminders() == []

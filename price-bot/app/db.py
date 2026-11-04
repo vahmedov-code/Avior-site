@@ -129,6 +129,18 @@ CREATE TABLE IF NOT EXISTS max_photos (
     tg_file_id TEXT PRIMARY KEY,
     payload    TEXT NOT NULL
 );
+-- Напоминания клиентам о профилактике (чистка, термопаста) через N месяцев после выдачи ремонта.
+-- status: draft — ждёт решения владельца, planned — запланировано, sent / failed / skip
+CREATE TABLE IF NOT EXISTS reminders (
+    id         INTEGER PRIMARY KEY,
+    user_id    INTEGER NOT NULL,
+    order_no   TEXT NOT NULL DEFAULT '',
+    device     TEXT NOT NULL DEFAULT '',
+    months     INTEGER,
+    due_at     INTEGER,
+    status     TEXT NOT NULL DEFAULT 'draft',
+    created_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS repair_watch (
     number  TEXT NOT NULL,
     user_id INTEGER NOT NULL,
@@ -611,6 +623,39 @@ class DB:
             else:
                 self.conn.execute("UPDATE crm_watch SET last_status = ? WHERE order_no = ? AND user_id = ?",
                                   (status, order_no, user_id))
+
+    # --- напоминания о профилактике ---
+    def add_reminder_draft(self, user_id: int, order_no: str, device: str) -> int:
+        with self.conn:
+            cur = self.conn.execute(
+                "INSERT INTO reminders(user_id, order_no, device, created_at) VALUES(?, ?, ?, ?)",
+                (user_id, order_no, device, int(time.time())))
+        return cur.lastrowid
+
+    def reminder(self, rid: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM reminders WHERE id = ?", (rid,)).fetchone()
+
+    def plan_reminder(self, rid: int, months: int) -> int:
+        """Через months месяцев (по 30 дней) от сегодня; возвращает время отправки."""
+        due = int(time.time()) + months * 30 * 86400
+        with self.conn:
+            self.conn.execute("UPDATE reminders SET months = ?, due_at = ?, status = 'planned' WHERE id = ?",
+                              (months, due, rid))
+        return due
+
+    def set_reminder_status(self, rid: int, status: str) -> None:
+        with self.conn:
+            self.conn.execute("UPDATE reminders SET status = ? WHERE id = ?", (status, rid))
+
+    def due_reminders(self, now: int) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM reminders WHERE status = 'planned' AND due_at <= ? ORDER BY due_at",
+                                 (now,)).fetchall()
+
+    def planned_reminders(self) -> list[sqlite3.Row]:
+        return self.conn.execute("SELECT * FROM reminders WHERE status = 'planned' ORDER BY due_at").fetchall()
+
+    def visitor(self, user_id: int) -> sqlite3.Row | None:
+        return self.conn.execute("SELECT * FROM visitors WHERE user_id = ?", (user_id,)).fetchone()
 
     def recent_repairs(self, limit: int = 15) -> list[sqlite3.Row]:
         return self.conn.execute("SELECT * FROM repairs ORDER BY updated_at DESC LIMIT ?", (limit,)).fetchall()

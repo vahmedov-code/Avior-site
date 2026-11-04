@@ -19,7 +19,7 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from . import keyboards as kb
-from . import outbox
+from . import outbox, reminders
 from .config import Config
 from .crm import CrmUnavailable, order_status, send_lead
 from .db import DB
@@ -36,6 +36,7 @@ admin_router.callback_query.filter(IsAdmin())
 log = logging.getLogger(__name__)
 CRM_POLL = 20 * 60          # как часто проверять статусы в CRM, секунд
 CRM_WATCH_DAYS = 60         # дольше не следим за заказом
+ISSUED = "выдан"  # «выдано», «выдан клиенту» — после этого предлагаем напоминание о профилактике
 DONE_WORDS = ("выдан", "закрыт", "отказ")  # после такого статуса следить больше не нужно
 STATUSES = ("🔍 Диагностика", "⏳ Ждём запчасть", "🛠 В ремонте", "✅ Готово — можно забирать", "📦 Выдано")
 NUMBER_RE = re.compile(r"[\w-]{1,20}")
@@ -250,12 +251,15 @@ async def crm_status_poller(bot: Bot, db: DB, cfg: Config) -> None:
             if not found or found["status"] == w["last_status"]:
                 continue
             done = any(word in found["status"].lower() for word in DONE_WORDS)
+            reachable = True
             try:
                 await outbox.send(bot, cfg, w["user_id"], "🔔 Обновился статус ремонта\n\n" + crm_text(found),
                                   kb.back_home())
             except outbox.DeliveryError:
-                done = True  # клиент заблокировал бота
+                done, reachable = True, False  # клиент заблокировал бота
             db.update_crm_watch(w["order_no"], w["user_id"], None if done else found["status"])
+            if reachable and ISSUED in found["status"].lower():
+                await reminders.offer(bot, db, cfg, w["user_id"], found["order_no"], found["device"])
             await asyncio.sleep(1)  # не нагружаем CRM
 
 
@@ -280,6 +284,9 @@ async def save_status(bot: Bot, db: DB, cfg: Config, number: str, status: str, d
             sent += 1
         except outbox.DeliveryError:
             pass
+    if ISSUED in status.lower():  # выдано — спросим, напомнить ли клиенту о профилактике
+        for user_id in watchers:
+            await reminders.offer(bot, db, cfg, user_id, number, row["device"])
     who = f"клиент уведомлён ({sent})" if sent else "клиент ещё не проверял статус в боте — увидит, когда проверит"
     return f"✅ Квитанция №{html.escape(number)}: {html.escape(status)}\n{who}"
 

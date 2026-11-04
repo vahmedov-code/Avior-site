@@ -10,7 +10,7 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import BotCommand, BotCommandScopeChat, ErrorEvent
 
 from . import (handlers_admin, handlers_news, handlers_reply, handlers_repair, handlers_search, handlers_tradein,
-               handlers_used, handlers_user)
+               handlers_used, handlers_user, reminders)
 from .config import Config
 from .db import DB
 from .emoji import EmojiMiddleware
@@ -24,6 +24,7 @@ ADMIN_COMMANDS = [
         ("bu", "Б/у: добавить, список, продано"),
         ("orders", "Последние заказы"),
         ("repair", "Статус ремонта: /repair 1234"),
+        ("remind", "Напоминания о профилактике"),
         ("send", "Рассылка клиентам"),
         ("channel", "Канал для б/у"),
         ("links", "Ссылки и QR-коды с метками"),
@@ -99,7 +100,7 @@ async def main() -> None:
     # Поиск последним: он отвечает на любой текст, который не забрали мастера выше.
     dp.include_routers(
         handlers_used.admin_router, handlers_tradein.admin_router, handlers_repair.admin_router,
-        handlers_news.admin_router, handlers_reply.admin_router, handlers_admin.router,
+        handlers_news.admin_router, handlers_reply.admin_router, reminders.admin_router, handlers_admin.router,
         handlers_used.router, handlers_tradein.router, handlers_repair.router, handlers_news.router,
         handlers_user.router, handlers_search.router,
     )
@@ -110,9 +111,11 @@ async def main() -> None:
     # Меню команд ставим в фоне: временный сбой Telegram («Bad Gateway») не должен ронять бота
     menus = asyncio.create_task(set_menus(bot, cfg))  # ссылку держим, чтобы задачу не собрал сборщик мусора
     crm = asyncio.create_task(handlers_repair.crm_status_poller(bot, db, cfg))
+    remind = asyncio.create_task(reminders.reminder_loop(bot, db, cfg))
     await dp.start_polling(bot)
     menus.cancel()
     crm.cancel()
+    remind.cancel()
 
 
 if __name__ == "__main__":
