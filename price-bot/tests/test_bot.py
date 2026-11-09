@@ -884,6 +884,6 @@ def test_visit_days_and_slots():
     assert visit.days(evening)[0][1] == "Завтра, чт 12 ноября"
     assert visit.slots_markup("20261111", evening) is None
     assert visit.describe("20261112", 0) == "четверг 12 ноября с 12:00 до 16:00"
-    assert visit.describe(visit.PHONE_CHOICE, None) == "время согласовать по телефону"
+    assert visit.describe(visit.PHONE_CHOICE, None) == "другое время — согласовать по телефону"
     buttons = [b.text for row in visit.slots_markup("20261112", evening).inline_keyboard for b in row]
-    assert buttons == ["🕐 12:00–16:00", "🕐 16:00–20:00", "⬅️ Другой день"]
+    assert buttons == ["🕐 12:00–16:00", "🕐 16:00–20:00", "📞 Другое время / срочно", "⬅️ Другой день"]

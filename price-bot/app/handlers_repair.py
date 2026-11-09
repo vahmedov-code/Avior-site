@@ -200,8 +200,7 @@ async def submit_booking(call: CallbackQuery, state: FSMContext, bot: Bot, db: D
     crm = "✅ записана в CRM" if error is None else f"⚠️ в CRM не попала: {html.escape(error)}"
     await notify_admins(bot, cfg, booking_text(user_link(user), d["phone"], d["device"], d["problem"], when, crm),
                         reply_markup(user.id))
-    await safe_edit(call, f"✅ <b>Заявка принята!</b>\n🗓 {html.escape(when)}\n\n"
-                          "Мастер перезвонит, подскажет цену и сроки.\n📍 Москва, Можайское ш., 4к1", None)
+    await safe_edit(call, visit.confirmation(when, cfg.shop_phone), None)
     await call.answer()
     await send_start(call.message, db, cfg, user.id)
 

@@ -67,6 +67,7 @@ class Config:
     wa_app_secret: str = ""                  # App secret приложения — проверка подписи запросов Meta
     wa_api_version: str = "v24.0"
     wa_port: int = 8081
+    shop_phone: str = "+7 (901) 222-81-11"  # для срочной связи: показывается при записи на ремонт
     link_username: str = ""  # дополнительный (Premium) адрес бота для красивых ссылок, напр. avior_app
     crm_lead_secret: str = ""
 
@@ -106,6 +107,7 @@ class Config:
             wa_app_secret=os.getenv("WA_APP_SECRET", "").strip(),
             wa_api_version=os.getenv("WA_API_VERSION", "v24.0").strip(),
             wa_port=int(os.getenv("WA_PORT", "8081")),
+            shop_phone=os.getenv("SHOP_PHONE", "+7 (901) 222-81-11").strip(),
             link_username=os.getenv("LINK_USERNAME", "").strip().lstrip("@"),
             crm_api_url=os.getenv("CRM_API_URL", "https://cms.avior.moscow/api").rstrip("/"),
             crm_lead_secret=os.getenv("CRM_LEAD_SECRET", "").strip(),

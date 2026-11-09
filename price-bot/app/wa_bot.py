@@ -334,7 +334,7 @@ class WaBot:
     async def visit_days(self, phone: str, note: str = "") -> None:
         """Последний шаг записи: день (список), затем интервал (кнопки)."""
         rows = [(f"rpd:{code}", label, "") for code, label in visit.days(now_local(self.cfg))]
-        rows.append((f"rpd:{visit.PHONE_CHOICE}", "📞 По телефону", "время согласуем по телефону"))
+        rows.append((f"rpd:{visit.PHONE_CHOICE}", "📞 Другое время", "или срочно — согласуем по телефону"))
         await self.api.menu(phone, note + html_to_wa("<b>Шаг 3 из 3.</b> Когда вам удобно приехать? Выберите день."),
                             "Выбрать день", rows)
 
@@ -344,8 +344,7 @@ class WaBot:
         crm = "✅ записана в CRM" if error is None else f"⚠️ в CRM не попала: {html.escape(error)}"
         await notify_admins(self.tg, self.cfg, booking_text(person(uid, name), None, device, problem, when, crm),
                             reply_markup(uid))
-        await self.home(phone, uid, f"✅ Заявка принята! 🗓 {when}\nМастер перезвонит, подскажет цену и сроки.\n"
-                                    "📍 Москва, Можайское ш., 4к1")
+        await self.home(phone, uid, html_to_wa(visit.confirmation(when, self.cfg.shop_phone)))
 
     async def repair_status(self, phone: str, uid: int, number: str, order_phone: str, retry: bool = True) -> None:
         try:

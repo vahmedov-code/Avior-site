@@ -463,8 +463,7 @@ class MaxBot:
         await notify_admins(self.tg, self.cfg,
                             booking_text(self.who(ev), state["phone"], state["device"], state["problem"], when, crm),
                             reply_markup(uid))
-        await self.show(ev, f"✅ <b>Заявка принята!</b>\n🗓 {html.escape(when)}\n\n"
-                            "Мастер перезвонит, подскажет цену и сроки.\n📍 Москва, Можайское ш., 4к1")
+        await self.show(ev, visit.confirmation(when, self.cfg.shop_phone))
         await self.home(ev)
 
     async def repair_status(self, ev: Event, number: str, phone: str) -> None:
