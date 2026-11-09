@@ -868,3 +868,22 @@ def test_maintenance_reminders():
     assert "12 мес." in reminder_text(db.reminder(rid)) and "Ноутбук ASUS TUF" in reminder_text(db.reminder(rid))
     db.set_reminder_status(rid, "sent")
     assert db.planned_reminders() == []
+
+
+def test_visit_days_and_slots():
+    from datetime import datetime
+    from app import visit
+    wed_morning = datetime(2026, 11, 11, 10, 0)   # среда, 10:00 — сегодня доступны оба интервала
+    days = visit.days(wed_morning)
+    assert len(days) == visit.DAYS_AHEAD
+    assert days[0] == ("20261111", "Сегодня, ср 11 ноября") and days[1] == ("20261112", "Завтра, чт 12 ноября")
+    assert visit.free_slots(wed_morning.date(), wed_morning) == [0, 1]
+    afternoon = datetime(2026, 11, 11, 13, 30)   # 12–16 уже идёт — остаётся только 16–20
+    assert visit.free_slots(afternoon.date(), afternoon) == [1]
+    evening = datetime(2026, 11, 11, 18, 0)      # сегодня записаться уже нельзя — список с завтра
+    assert visit.days(evening)[0][1] == "Завтра, чт 12 ноября"
+    assert visit.slots_markup("20261111", evening) is None
+    assert visit.describe("20261112", 0) == "четверг 12 ноября с 12:00 до 16:00"
+    assert visit.describe(visit.PHONE_CHOICE, None) == "время согласовать по телефону"
+    buttons = [b.text for row in visit.slots_markup("20261112", evening).inline_keyboard for b in row]
+    assert buttons == ["🕐 12:00–16:00", "🕐 16:00–20:00", "⬅️ Другой день"]

@@ -19,7 +19,7 @@ from aiogram.types import CallbackQuery, Message, ReplyKeyboardRemove
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from . import keyboards as kb
-from . import outbox, reminders
+from . import outbox, reminders, visit
 from .config import Config
 from .crm import CrmUnavailable, order_status, send_lead
 from .db import DB
@@ -76,6 +76,7 @@ class RepairBook(StatesGroup):
     device = State()
     problem = State()
     phone = State()
+    visit = State()
 
 
 class RepairStatus(StatesGroup):
@@ -111,7 +112,7 @@ async def cb_repair(call: CallbackQuery, state: FSMContext):
 @router.callback_query(F.data == "rpnew")
 async def cb_book(call: CallbackQuery, state: FSMContext):
     await state.set_state(RepairBook.device)
-    await call.message.answer("<b>Шаг 1 из 3.</b> Что за устройство? Например: <code>iPhone 13</code>, "
+    await call.message.answer("<b>Шаг 1 из 4.</b> Что за устройство? Например: <code>iPhone 13</code>, "
                               "<code>ноутбук ASUS TUF</code>, <code>PS5</code>", reply_markup=kb.cancel_lead())
     await call.answer()
 
@@ -120,7 +121,7 @@ async def cb_book(call: CallbackQuery, state: FSMContext):
 async def on_device(message: Message, state: FSMContext):
     await state.update_data(device=message.text.strip()[:120])
     await state.set_state(RepairBook.problem)
-    await message.answer("<b>Шаг 2 из 3.</b> Что случилось? Опишите коротко: "
+    await message.answer("<b>Шаг 2 из 4.</b> Что случилось? Опишите коротко: "
                          "<code>разбит экран</code>, <code>не включается после воды</code>, <code>греется</code>",
                          reply_markup=kb.cancel_lead())
 
@@ -129,7 +130,7 @@ async def on_device(message: Message, state: FSMContext):
 async def on_problem(message: Message, state: FSMContext):
     await state.update_data(problem=message.text.strip()[:1000])
     await state.set_state(RepairBook.phone)
-    await message.answer("<b>Шаг 3 из 3.</b> Оставьте номер телефона — мастер перезвонит и подскажет "
+    await message.answer("<b>Шаг 3 из 4.</b> Оставьте номер телефона — мастер перезвонит и подскажет "
                          "цену и сроки.", reply_markup=kb.phone_request())
 
 
@@ -140,25 +141,78 @@ async def on_book_cancel(message: Message, state: FSMContext, db: DB, cfg: Confi
     await send_start(message, db, cfg, message.from_user.id)
 
 
+def now_local(cfg: Config) -> datetime:
+    return datetime.now(ZoneInfo(cfg.timezone))
+
+
 @router.message(StateFilter(RepairBook.phone), F.contact | F.text)
-async def on_book_phone(message: Message, state: FSMContext, bot: Bot, db: DB, cfg: Config):
+async def on_book_phone(message: Message, state: FSMContext, cfg: Config):
     phone = contact_phone(message)
     if len(re.sub(r"\D", "", phone)) < 10:
         await message.answer("Не похоже на номер телефона. Пример: +7 900 123-45-67", reply_markup=kb.phone_request())
         return
+    await state.update_data(phone=phone)
+    await state.set_state(RepairBook.visit)
+    await message.answer("📱 Номер записан.", reply_markup=ReplyKeyboardRemove())
+    await message.answer(visit.DAYS_TEXT, reply_markup=visit.days_markup(now_local(cfg)))
+
+
+@router.callback_query(StateFilter(RepairBook.visit), F.data == "rpdays")
+async def cb_visit_days(call: CallbackQuery, cfg: Config):
+    await safe_edit(call, visit.DAYS_TEXT, visit.days_markup(now_local(cfg)))
+    await call.answer()
+
+
+@router.callback_query(StateFilter(RepairBook.visit), F.data.startswith("rpd:"))
+async def cb_visit_day(call: CallbackQuery, state: FSMContext, bot: Bot, db: DB, cfg: Config):
+    code = call.data[4:]
+    if code == visit.PHONE_CHOICE:
+        await submit_booking(call, state, bot, db, cfg, visit.describe(code, None))
+        return
+    markup = visit.slots_markup(code, now_local(cfg))
+    if markup is None:
+        await safe_edit(call, visit.DAYS_TEXT, visit.days_markup(now_local(cfg)))
+        await call.answer("На этот день запись уже закрыта — выберите другой", show_alert=True)
+        return
+    await safe_edit(call, f"🗓 <b>{visit.day_title(code)}</b>. Выберите удобное время:", markup)
+    await call.answer()
+
+
+@router.callback_query(StateFilter(RepairBook.visit), F.data.startswith("rps:"))
+async def cb_visit_slot(call: CallbackQuery, state: FSMContext, bot: Bot, db: DB, cfg: Config):
+    _, code, slot = call.data.split(":")
+    day = visit.parse(code)
+    if not day or int(slot) not in visit.free_slots(day, now_local(cfg)):
+        await safe_edit(call, visit.DAYS_TEXT, visit.days_markup(now_local(cfg)))
+        await call.answer("Это время уже прошло — выберите другое", show_alert=True)
+        return
+    await submit_booking(call, state, bot, db, cfg, visit.describe(code, int(slot)))
+
+
+async def submit_booking(call: CallbackQuery, state: FSMContext, bot: Bot, db: DB, cfg: Config, when: str) -> None:
+    """Последний шаг пройден: заявка — в CRM и владельцу, клиенту — подтверждение."""
     d = await state.get_data()
     await state.clear()
-    user = message.from_user
+    user = call.from_user
     tg = f", @{user.username}" if user.username else ""
-    error = await send_lead(cfg, user.full_name, phone,
-                            f"{d['device']}: {d['problem']}\n(заявка из Telegram-бота{tg})")
+    error = await send_lead(cfg, user.full_name, d["phone"],
+                            f"{d['device']}: {d['problem']}\nУдобное время: {when}\n(заявка из Telegram-бота{tg})")
     crm = "✅ записана в CRM" if error is None else f"⚠️ в CRM не попала: {html.escape(error)}"
-    await notify_admins(bot, cfg, f"🔧 <b>Запись на ремонт</b>\n👤 {user_link(user)}\n"
-                                  f"📱 {html.escape(phone)}\n\n<b>{html.escape(d['device'])}</b>\n"
-                                  f"{html.escape(d['problem'])}\n\n{crm}", reply_markup(user.id))
-    await message.answer("✅ Заявка принята! Мастер перезвонит, подскажет цену и сроки.\n"
-                         "📍 Москва, Можайское ш., 4к1", reply_markup=ReplyKeyboardRemove())
-    await send_start(message, db, cfg, message.from_user.id)
+    await notify_admins(bot, cfg, booking_text(user_link(user), d["phone"], d["device"], d["problem"], when, crm),
+                        reply_markup(user.id))
+    await safe_edit(call, f"✅ <b>Заявка принята!</b>\n🗓 {html.escape(when)}\n\n"
+                          "Мастер перезвонит, подскажет цену и сроки.\n📍 Москва, Можайское ш., 4к1", None)
+    await call.answer()
+    await send_start(call.message, db, cfg, user.id)
+
+
+def booking_text(who: str, phone: str | None, device: str, problem: str, when: str, crm: str) -> str:
+    """Заявка для владельца — одинаковая из Telegram, MAX и WhatsApp."""
+    lines = ["🔧 <b>Запись на ремонт</b>", f"👤 {who}"]
+    if phone:
+        lines.append(f"📱 {html.escape(phone)}")
+    lines += ["", f"<b>{html.escape(device)}</b>", html.escape(problem), f"🗓 {html.escape(when)}", "", crm]
+    return "\n".join(lines)
 
 
 # --- статус для клиента ---

@@ -21,11 +21,11 @@ from aiogram.enums import ParseMode
 from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 
 from . import keyboards as kb
-from . import sources
+from . import sources, visit
 from .config import Config
 from .crm import CrmUnavailable, order_status, send_lead
 from .db import DB
-from .handlers_repair import REPAIR_TEXT, clean_number, crm_text, status_text
+from .handlers_repair import REPAIR_TEXT, booking_text, clean_number, crm_text, now_local, status_text
 from .handlers_reply import reply_markup
 from .handlers_search import render_results
 from .handlers_used import CONDITIONS, card_markup, card_text, kind_list, showcase
@@ -294,8 +294,29 @@ class MaxBot:
                                                     [("🔎 Статус ремонта", "rpstatus")], [("🏠 В меню", "home")]))
         elif p == "rpnew":
             self.states[uid] = {"state": "rp_device"}
-            await self.say(ev, "<b>Шаг 1 из 3.</b> Что за устройство? Например: <code>iPhone 13</code>, "
+            await self.say(ev, "<b>Шаг 1 из 4.</b> Что за устройство? Например: <code>iPhone 13</code>, "
                                "<code>ноутбук ASUS TUF</code>, <code>PS5</code>", CANCEL)
+        elif p == "rpdays" and state.get("state") == "rp_visit":
+            await self.show(ev, visit.DAYS_TEXT, visit.days_markup(now_local(cfg)))
+        elif p.startswith("rpd:") and state.get("state") == "rp_visit":
+            code = p[4:]
+            if code == visit.PHONE_CHOICE:
+                await self.repair_submit(ev, state, visit.describe(code, None))
+                return
+            slots = visit.slots_markup(code, now_local(cfg))
+            if slots is None:
+                await self.show(ev, visit.DAYS_TEXT, visit.days_markup(now_local(cfg)),
+                                note="На этот день запись уже закрыта — выберите другой")
+            else:
+                await self.show(ev, f"🗓 <b>{visit.day_title(code)}</b>. Выберите удобное время:", slots)
+        elif p.startswith("rps:") and state.get("state") == "rp_visit":
+            _, code, slot = p.split(":")
+            day = visit.parse(code)
+            if not day or int(slot) not in visit.free_slots(day, now_local(cfg)):
+                await self.show(ev, visit.DAYS_TEXT, visit.days_markup(now_local(cfg)),
+                                note="Это время уже прошло — выберите другое")
+            else:
+                await self.repair_submit(ev, state, visit.describe(code, int(slot)))
         elif p == "rpstatus":
             self.states[uid] = {"state": "rp_number"}
             await self.say(ev, "Напишите номер заказа (он есть в квитанции), например <code>1234</code>.", CANCEL)
@@ -403,29 +424,19 @@ class MaxBot:
         uid, step = ev.client.uid, state["state"]
         if step == "rp_device" and ev.text:
             state.update(state="rp_problem", device=ev.text[:120])
-            await self.say(ev, "<b>Шаг 2 из 3.</b> Что случилось? Опишите коротко: <code>разбит экран</code>, "
+            await self.say(ev, "<b>Шаг 2 из 4.</b> Что случилось? Опишите коротко: <code>разбит экран</code>, "
                                "<code>не включается после воды</code>, <code>греется</code>", CANCEL)
         elif step == "rp_problem" and ev.text:
             state.update(state="rp_phone", problem=ev.text[:1000])
-            await self.ask_phone(ev, "<b>Шаг 3 из 3.</b> Оставьте номер телефона — мастер перезвонит и подскажет "
+            await self.ask_phone(ev, "<b>Шаг 3 из 4.</b> Оставьте номер телефона — мастер перезвонит и подскажет "
                                      "цену и сроки.")
         elif step == "rp_phone":
             phone = self.phone_of(ev)
             if not phone:
                 await self.ask_phone(ev, "Не похоже на номер телефона. Пример: +7 900 123-45-67")
                 return
-            self.states.pop(uid, None)
-            nick = f", @{ev.client.username}" if ev.client.username else ""
-            error = await send_lead(self.cfg, ev.client.name, phone,
-                                    f"{state['device']}: {state['problem']}\n(заявка из MAX-бота{nick})")
-            crm = "✅ записана в CRM" if error is None else f"⚠️ в CRM не попала: {html.escape(error)}"
-            await notify_admins(self.tg, self.cfg,
-                                f"🔧 <b>Запись на ремонт</b>\n👤 {self.who(ev)}\n📱 {html.escape(phone)}\n\n"
-                                f"<b>{html.escape(state['device'])}</b>\n{html.escape(state['problem'])}\n\n{crm}",
-                                reply_markup(uid))
-            await self.say(ev, "✅ Заявка принята! Мастер перезвонит, подскажет цену и сроки.\n"
-                               "📍 Москва, Можайское ш., 4к1")
-            await self.home(ev)
+            state.update(state="rp_visit", phone=phone)
+            await self.say(ev, visit.DAYS_TEXT, visit.days_markup(now_local(self.cfg)))
         elif step == "rp_number" and ev.text:
             number = clean_number(ev.text)
             if not number:
@@ -440,6 +451,21 @@ class MaxBot:
                 return
             self.states.pop(uid, None)
             await self.repair_status(ev, state["number"], phone)
+
+    async def repair_submit(self, ev: Event, state: dict, when: str) -> None:
+        """Последний шаг записи пройден: заявка — в CRM и владельцу, клиенту — подтверждение."""
+        uid = ev.client.uid
+        self.states.pop(uid, None)
+        nick = f", @{ev.client.username}" if ev.client.username else ""
+        error = await send_lead(self.cfg, ev.client.name, state["phone"],
+                                f"{state['device']}: {state['problem']}\nУдобное время: {when}\n(заявка из MAX-бота{nick})")
+        crm = "✅ записана в CRM" if error is None else f"⚠️ в CRM не попала: {html.escape(error)}"
+        await notify_admins(self.tg, self.cfg,
+                            booking_text(self.who(ev), state["phone"], state["device"], state["problem"], when, crm),
+                            reply_markup(uid))
+        await self.show(ev, f"✅ <b>Заявка принята!</b>\n🗓 {html.escape(when)}\n\n"
+                            "Мастер перезвонит, подскажет цену и сроки.\n📍 Москва, Можайское ш., 4к1")
+        await self.home(ev)
 
     async def repair_status(self, ev: Event, number: str, phone: str) -> None:
         uid = ev.client.uid

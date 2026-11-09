@@ -25,10 +25,11 @@ from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboar
 from aiohttp import web
 
 from . import keyboards as kb
+from . import visit
 from .config import Config
 from .crm import CrmUnavailable, order_status, send_lead
 from .db import DB
-from .handlers_repair import REPAIR_TEXT, clean_number, crm_text, status_text
+from .handlers_repair import REPAIR_TEXT, booking_text, clean_number, crm_text, now_local, status_text
 from .handlers_reply import reply_markup
 from .handlers_used import CONDITIONS, card_text
 from .handlers_user import notify_admins, person, render_cart, render_order_for_admin, welcome
@@ -202,8 +203,30 @@ class WaBot:
                                                 ("home", "🏠 Меню")])
         elif p == "rpnew":
             self.states[uid] = {"state": "rp_device"}
-            await self.say(phone, "<b>Шаг 1 из 2.</b> Что за устройство? Например: <b>iPhone 13</b>, "
+            await self.say(phone, "<b>Шаг 1 из 3.</b> Что за устройство? Например: <b>iPhone 13</b>, "
                                   "<b>ноутбук ASUS TUF</b>, <b>PS5</b>")
+        elif p == "rpdays" and state.get("state") == "rp_visit":
+            await self.visit_days(phone)
+        elif p.startswith("rpd:") and state.get("state") == "rp_visit":
+            code = p[4:]
+            slots = visit.slots_markup(code, now_local(cfg)) if code != visit.PHONE_CHOICE else None
+            if code == visit.PHONE_CHOICE:
+                self.states.pop(uid, None)
+                await self.repair_request(phone, uid, name, state["device"], state["problem"], visit.describe(code, None))
+            elif slots is None:
+                await self.visit_days(phone, "На этот день запись уже закрыта — выберите другой.\n\n")
+            else:
+                await self.say(phone, f"🗓 <b>{visit.day_title(code)}</b>. Выберите удобное время:",
+                               [(b.callback_data, b.text) for row in slots.inline_keyboard for b in row])
+        elif p.startswith("rps:") and state.get("state") == "rp_visit":
+            _, code, slot = p.split(":")
+            day = visit.parse(code)
+            if not day or int(slot) not in visit.free_slots(day, now_local(cfg)):
+                await self.visit_days(phone, "Это время уже прошло — выберите другое.\n\n")
+            else:
+                self.states.pop(uid, None)
+                await self.repair_request(phone, uid, name, state["device"], state["problem"],
+                                          visit.describe(code, int(slot)))
         elif p == "rpstatus":
             self.states[uid] = {"state": "rp_number"}
             await self.say(phone, "Напишите номер заказа (он есть в квитанции), например <b>1234</b>.")
@@ -242,11 +265,11 @@ class WaBot:
             await self.home(phone, uid, "✅ Спасибо! Вопрос отправлен, скоро ответим.")
         elif step == "rp_device":
             state.update(state="rp_problem", device=text[:120])
-            await self.say(phone, "<b>Шаг 2 из 2.</b> Что случилось? Опишите коротко: <b>разбит экран</b>, "
+            await self.say(phone, "<b>Шаг 2 из 3.</b> Что случилось? Опишите коротко: <b>разбит экран</b>, "
                                   "<b>не включается после воды</b>, <b>греется</b>")
         elif step == "rp_problem":
-            self.states.pop(uid, None)
-            await self.repair_request(phone, uid, name, state["device"], text[:1000])
+            state.update(state="rp_visit", problem=text[:1000])
+            await self.visit_days(phone)
         elif step == "rp_number":
             number = clean_number(text)
             if not number:
@@ -308,13 +331,20 @@ class WaBot:
                                     f"Получение: {delivery}\nМы скоро свяжемся с вами для подтверждения.")
 
     # --- ремонт ---
-    async def repair_request(self, phone: str, uid: int, name: str, device: str, problem: str) -> None:
-        error = await send_lead(self.cfg, name, f"+{phone}", f"{device}: {problem}\n(заявка из WhatsApp-бота)")
+    async def visit_days(self, phone: str, note: str = "") -> None:
+        """Последний шаг записи: день (список), затем интервал (кнопки)."""
+        rows = [(f"rpd:{code}", label, "") for code, label in visit.days(now_local(self.cfg))]
+        rows.append((f"rpd:{visit.PHONE_CHOICE}", "📞 По телефону", "время согласуем по телефону"))
+        await self.api.menu(phone, note + html_to_wa("<b>Шаг 3 из 3.</b> Когда вам удобно приехать? Выберите день."),
+                            "Выбрать день", rows)
+
+    async def repair_request(self, phone: str, uid: int, name: str, device: str, problem: str, when: str) -> None:
+        error = await send_lead(self.cfg, name, f"+{phone}",
+                                f"{device}: {problem}\nУдобное время: {when}\n(заявка из WhatsApp-бота)")
         crm = "✅ записана в CRM" if error is None else f"⚠️ в CRM не попала: {html.escape(error)}"
-        await notify_admins(self.tg, self.cfg, f"🔧 <b>Запись на ремонт</b>\n👤 {person(uid, name)}\n\n"
-                                               f"<b>{html.escape(device)}</b>\n{html.escape(problem)}\n\n{crm}",
+        await notify_admins(self.tg, self.cfg, booking_text(person(uid, name), None, device, problem, when, crm),
                             reply_markup(uid))
-        await self.home(phone, uid, "✅ Заявка принята! Мастер перезвонит, подскажет цену и сроки.\n"
+        await self.home(phone, uid, f"✅ Заявка принята! 🗓 {when}\nМастер перезвонит, подскажет цену и сроки.\n"
                                     "📍 Москва, Можайское ш., 4к1")
 
     async def repair_status(self, phone: str, uid: int, number: str, order_phone: str, retry: bool = True) -> None:
