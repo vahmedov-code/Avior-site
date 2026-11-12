@@ -1,6 +1,6 @@
 [Unit]
 Description=AVIOR bot in MAX messenger
-After=network-online.target avior-bot.service
+After=network-online.target avior-shop.service
 Wants=network-online.target
 
 [Service]

@@ -1,6 +1,6 @@
 [Unit]
 Description=AVIOR bot in WhatsApp (Cloud API webhook on 127.0.0.1:8081)
-After=network-online.target avior-bot.service
+After=network-online.target avior-shop.service
 Wants=network-online.target
 
 [Service]

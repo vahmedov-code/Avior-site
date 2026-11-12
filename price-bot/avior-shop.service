@@ -1,5 +1,5 @@
 [Unit]
-Description=AVIOR Shop Telegram bot
+Description=AVIOR Shop Telegram bot (shop, repair, trade-in)
 After=network-online.target
 Wants=network-online.target
 
