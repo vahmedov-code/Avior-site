@@ -2,7 +2,9 @@
 import html
 import io
 import json
-from datetime import date
+from datetime import date, datetime
+from pathlib import Path
+from zoneinfo import ZoneInfo
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest
@@ -29,6 +31,7 @@ from .parser import count_items, parse_post
 from .pricing import apply_markup, fmt_price
 from .rules import filter_sections
 from .stats import format_stats, format_users
+from .collected_import import handle as handle_collected
 from .telegram_export import load_any
 
 router = Router(name="admin")
@@ -637,6 +640,22 @@ async def on_emoji(message: Message, state: FSMContext, db: DB, cfg: Config):
     problem = emoji_problem(db)  # первая страница только что ушла — знаем, принял ли Telegram значки
     if problem:
         await message.answer(problem.strip())
+
+
+@router.callback_query(F.data == "collect:apply")
+async def cb_collect_apply(call: CallbackQuery, db: DB, cfg: Config):
+    """«✅ Всё равно применить» под предупреждением сборщика: применяем последний прочитанный прайс."""
+    path = Path(cfg.db_path).parent / "collected.json"  # сюда его кладёт сборщик с Windows-сервера
+    if not path.exists():
+        await call.answer("Файл сборщика не найден — запустите сборщик ещё раз", show_alert=True)
+        return
+    read_at = datetime.fromtimestamp(path.stat().st_mtime, ZoneInfo(cfg.timezone)).strftime("%d.%m %H:%M")
+    text, _, _ = handle_collected(db, cfg, json.loads(path.read_text(encoding="utf-8")), report_always=True,
+                                  force=True)
+    await call.message.edit_reply_markup(reply_markup=None)
+    await call.message.answer(f"✅ Применён прайс, прочитанный {read_at}.\n\n{text or ''}"[:4000])
+    await call.answer()
+    await notify_watchers(call.message, db, cfg)
 
 
 @router.message(Command("stats"))

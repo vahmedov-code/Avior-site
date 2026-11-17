@@ -50,30 +50,54 @@ def format_changes(db: DB, results, limit: int = 25) -> str:
     return "\n".join(lines)
 
 
-def handle(db: DB, cfg: Config, data: dict, report_always: bool = False) -> tuple[str | None, bytes | None]:
-    """Возвращает (текст для владельца или None, если сообщать нечего; скриншот)."""
+def change_samples(removed: list[tuple[str, str]], added: list[tuple[str, str]], limit: int = 6) -> str:
+    """Примеры для владельца: у одной модели поменялась подпись — «было → стало» в одну строку;
+    так сразу видно, правил ли поставщик подписи или веб-версия потеряла флаги."""
+    new_by_name: dict[str, list[str]] = {}
+    for name, note in added:
+        new_by_name.setdefault(name, []).append(note)
+    lines = []
+    for name, note in removed:
+        if len(lines) >= limit:
+            break
+        if new_by_name.get(name):
+            lines.append(f"• {html.escape(name[:50])}: {html.escape(note or '—')} → "
+                         f"{html.escape(new_by_name[name].pop(0) or '—')}")
+        else:
+            lines.append(f"• пропало: {html.escape(' '.join(p for p in (name, note) if p)[:70])}")
+    left = [f"{n} {x}".strip() for n, notes in new_by_name.items() for x in notes]
+    for item in left[:max(0, limit - len(lines))]:
+        lines.append(f"• новое: {html.escape(item[:70])}")
+    return "\n".join(lines)
+
+
+def handle(db: DB, cfg: Config, data: dict, report_always: bool = False,
+           force: bool = False) -> tuple[str | None, bytes | None, bool]:
+    """Возвращает (текст для владельца или None, если сообщать нечего; скриншот;
+    нужно ли спросить владельца «всё равно применить?»). force — применить, несмотря на защиту."""
     if data.get("format") != RESULT_FORMAT:
-        return "⚠️ Сборщик прислал файл непонятного формата. Цены не изменены.", None
+        return "⚠️ Сборщик прислал файл непонятного формата. Цены не изменены.", None, False
     if not data.get("ok"):
         shot = base64.b64decode(data["screenshot"]) if data.get("screenshot") else None
         return (f"⚠️ Сборщик не смог прочитать канал: {html.escape(data.get('error', ''))}. "
-                "Цены не изменены." + (" Вот что видел браузер:" if shot else "")), shot
+                "Цены не изменены." + (" Вот что видел браузер:" if shot else "")), shot, False
 
     info = supplier(db)
     if not info:
-        return "Сборщик: сначала один раз отправьте боту экспорт канала (result.json).", None
+        return "Сборщик: сначала один раз отправьте боту экспорт канала (result.json).", None, False
     # Номера постов — целые; «0.01» и т.п. — служебные элементы страницы Telegram Web
     posts = {int(i): t for i, t in data["posts"].items() if str(i).isdigit()}
     catalog = load_any(export_from_posts(info, posts), **catalog_filters(db, cfg))
     if not catalog.categories:
-        return "⚠️ Сборщик прочитал канал, но не нашёл цен. Цены не изменены.", None
+        return "⚠️ Сборщик прочитал канал, но не нашёл цен. Цены не изменены.", None, False
     previous, removed, added = preview_removals(db, catalog)
-    if previous and len(removed) > MAX_REMOVED_SHARE * previous:
-        sample_old = "\n".join("• " + html.escape(x[:70]) for x in sorted(removed)[:3])
-        sample_new = "\n".join("• " + html.escape(x[:70]) for x in sorted(added)[:3])
-        return (f"⚠️ Сборщик прочитал канал, но {len(removed)} из {previous} позиций выглядят иначе, чем сейчас. "
-                "Похоже на сбой чтения — <b>цены не изменены</b>.\n\nБыло, например:\n"
-                f"{sample_old}\nСтало:\n{sample_new}"), None
+    if previous and len(removed) > MAX_REMOVED_SHARE * previous and not force:
+        return (f"⚠️ Сборщик прочитал канал, но {len(removed)} из {previous} позиций выглядят иначе, чем сейчас — "
+                "<b>цены пока не изменены</b>.\n\n"
+                f"{change_samples(removed, added)}\n\n"
+                "Если это обычные правки поставщика (новые флаги, подписи, модели) — нажмите "
+                "«✅ Всё равно применить». Если подписи «потерялись» (пропали флаги, обрезан текст) — "
+                "это сбой чтения, ничего не делайте: при следующем запуске сборщик прочитает заново."), None, True
     results = import_catalog(db, cfg, catalog)
 
     # Новые кнопки в меню поставщика: сравниваем со всеми кнопками, включая служебные (VK, Trade-In…).
@@ -85,9 +109,9 @@ def handle(db: DB, cfg: Config, data: dict, report_always: bool = False) -> tupl
 
     changed = sum(len(r.diff.changed) + len(r.diff.added) + len(r.diff.removed) for r in results)
     if not (changed or new_buttons or report_always):
-        return None, None
+        return None, None, False
     text = format_changes(db, results)
     if new_buttons:
         text += ("\n\n🆕 В меню поставщика новые кнопки: " + html.escape(", ".join(new_buttons))
                  + ". Чтобы я их подхватил, один раз отправьте боту свежий экспорт канала.")
-    return text[:4000], None
+    return text[:4000], None, False

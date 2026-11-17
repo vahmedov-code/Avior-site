@@ -104,9 +104,9 @@ def _existing_category(db: DB, catalog: Catalog, c):
     return cat
 
 
-def preview_removals(db: DB, catalog: Catalog) -> tuple[int, list[str], list[str]]:
+def preview_removals(db: DB, catalog: Catalog) -> tuple[int, list[tuple[str, str]], list[tuple[str, str]]]:
     """Без записи в базу: сколько позиций сейчас в затронутых категориях и какие из них
-    пропадут / появятся, если применить каталог."""
+    пропадут / появятся, если применить каталог: списки (название, примечание)."""
     previous, removed, added = 0, [], []
     for c in catalog.categories:
         cat = _existing_category(db, catalog, c)
@@ -114,8 +114,8 @@ def preview_removals(db: DB, catalog: Catalog) -> tuple[int, list[str], list[str
         old = {(r["name"], r["note"]) for r in db.items(cat["id"])} if cat else set()
         new = {(it.name, it.note) for s in c.sections for it in s.items}
         previous += len(old)
-        removed += [" ".join(p for p in k if p) for k in old - new]
-        added += [" ".join(p for p in k if p) for k in new - old]
+        removed += sorted(old - new)
+        added += sorted(new - old)
     return previous, removed, added
 
 

@@ -115,15 +115,18 @@ def cmd_import_collected(args, cfg: Config) -> None:
     from aiogram import Bot
     from aiogram.client.default import DefaultBotProperties
     from aiogram.enums import ParseMode
-    from aiogram.types import BufferedInputFile
+    from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
     from app.alerts import send_price_alerts
     from app.collected_import import handle
 
     bot_cfg = Config.from_env()
     with open(args.file, encoding="utf-8") as f:
-        text, photo = handle(bot_db(bot_cfg), bot_cfg, json.load(f), args.report)
+        text, photo, confirm = handle(bot_db(bot_cfg), bot_cfg, json.load(f), args.report)
     print(text or "Изменений нет.")
+    # защита от сбоя чтения сработала — владелец решает кнопкой (бот применит этот же файл)
+    markup = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text="✅ Всё равно применить", callback_data="collect:apply")]]) if confirm else None
 
     async def send():
         bot = Bot(bot_cfg.bot_token, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -132,7 +135,7 @@ def cmd_import_collected(args, cfg: Config) -> None:
                 if photo:
                     await bot.send_photo(admin_id, BufferedInputFile(photo, "screen.png"), caption=text[:1000])
                 else:
-                    await bot.send_message(admin_id, text)
+                    await bot.send_message(admin_id, text, reply_markup=markup)
             # клиентам — что из их корзины подешевело или снова появилось
             sent = await send_price_alerts(bot, bot_db(bot_cfg), bot_cfg)
             print(f"Уведомлений о ценах: {sent}")

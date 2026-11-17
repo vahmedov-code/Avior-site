@@ -417,17 +417,17 @@ def test_collected_import_from_windows_collector():
     collected = {"format": "avior-collected-1", "ok": True,
                  "posts": {"10": "iPhone 18 Pro\n18 Pro 256 Black-115.500", "0.01": "October 24"},
                  "menu_buttons": ["iPhone 18 Pro", "VK"]}
-    text, _ = handle(db, cfg, collected)
+    text, _, _ = handle(db, cfg, collected)
     assert text.startswith("🤖") and "изменений: 1" in text  # первый раз — новая позиция
 
-    assert handle(db, cfg, collected) == (None, None)  # ничего не изменилось — молчим
+    assert handle(db, cfg, collected) == (None, None, False)  # ничего не изменилось — молчим
 
     collected["posts"]["10"] = "iPhone 18 Pro\n18 Pro 256 Black-112.000"
     collected["menu_buttons"].append("iPhone 19")
-    text, _ = handle(db, cfg, collected)
+    text, _, _ = handle(db, cfg, collected)
     assert "115 500 ₽ → 112 000 ₽ (у вас 122 000 ₽)" in text and "новые кнопки: iPhone 19" in text
 
-    text, photo = handle(db, cfg, failure("прочитано 7 из 33 постов меню", b"png"))
+    text, photo, _ = handle(db, cfg, failure("прочитано 7 из 33 постов меню", b"png"))
     assert "Цены не изменены" in text and photo == b"png"
     assert db.items(db.find_category_by_title("iPhone 18 Pro")["id"])[0]["base_price"] == 112000  # ошибка цены не трогает
 
@@ -448,9 +448,14 @@ def test_collected_import_refuses_mass_changes():
     import_catalog(db, cfg, build_catalog(export))
     # веб-версия «потеряла» флаги — все 10 позиций выглядят новыми
     collected = {"format": "avior-collected-1", "ok": True, "posts": {"10": "iPhone 18 Pro\n" + lines.replace("🇺🇸", "")}}
-    text, _ = handle(db, cfg, collected)
-    assert "10 из 10 позиций выглядят иначе" in text and "цены не изменены" in text
+    text, _, _ = handle(db, cfg, collected)
+    text, _, confirm = handle(db, cfg, collected)
+    assert confirm and "10 из 10 позиций выглядят иначе" in text and "цены пока не изменены" in text
+    assert "18 Pro 0 Black: 🇺🇸e sim → e sim" in text  # видно, что пропали флаги
     assert db.items(db.find_category_by_title("iPhone 18 Pro")["id"])[0]["note"] == "🇺🇸e sim"
+    # владелец посмотрел и нажал «Всё равно применить»
+    text, _, confirm = handle(db, cfg, collected, force=True)
+    assert not confirm and db.items(db.find_category_by_title("iPhone 18 Pro")["id"])[0]["note"] == "e sim"
 
 
 def test_renamed_section_is_not_added_and_removed():
