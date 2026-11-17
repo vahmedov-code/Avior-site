@@ -12,6 +12,8 @@ from .pricing import apply_markup, fmt_price
 from .telegram_export import TITLE_JUNK_RE, export_from_posts, load_any
 
 RESULT_FORMAT = "avior-collected-1"
+REQUEST_SETTING = "collect_request"   # время запроса «обновить цены сейчас» из бота (/prices)
+LAST_SETTING = "collect_last"         # когда сборщик последний раз прислал прайс
 # Если сборщик выкидывает/переименовывает больше этой доли позиций — не применяем:
 # скорее всего, веб-версия Telegram отдала текст не так, как обычно
 MAX_REMOVED_SHARE = 0.1

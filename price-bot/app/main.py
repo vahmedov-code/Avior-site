@@ -20,6 +20,7 @@ from .stats import VisitMiddleware
 ADMIN_COMMANDS = [
     BotCommand(command=c, description=d) for c, d in (
         ("start", "Каталог и цены (как видят клиенты)"),
+        ("prices", "Обновить цены сейчас"),
         ("stats", "Статистика посещений и заказов"),
         ("bu", "Б/у: добавить, список, продано"),
         ("orders", "Последние заказы"),

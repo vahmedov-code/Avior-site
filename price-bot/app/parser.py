@@ -150,3 +150,16 @@ def parse_post(text: str, block_words: tuple[str, ...] = ()) -> list[Section]:
 
 def count_items(sections: list[Section]) -> int:
     return sum(len(s.items) for s in sections)
+
+
+# Поставщик пишет одно и то же по-разному: «(e sim)», «(е sim)» с русской «е», «(e sim» без скобки, «e sim».
+# Для сравнения прайсов (что изменилось) такие мелочи не важны; флаги и слова — важны.
+_LOOKALIKE = str.maketrans("аеорсухкмтвн", "aeopcyxkmtbh")
+_COSMETIC_RE = re.compile(r"[\s()\[\]\ufe0f.,:;\-–—*]+")
+
+
+def same_key(name: str, note: str) -> tuple[str, str]:
+    """Ключ позиции для сравнения старого и нового прайса."""
+    def norm(text: str) -> str:
+        return _COSMETIC_RE.sub("", text.lower().translate(_LOOKALIKE))
+    return norm(name), norm(note)

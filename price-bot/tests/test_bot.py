@@ -892,3 +892,21 @@ def test_visit_days_and_slots():
     assert visit.describe(visit.PHONE_CHOICE, None) == "другое время — согласовать по телефону"
     buttons = [b.text for row in visit.slots_markup("20261112", evening).inline_keyboard for b in row]
     assert buttons == ["🕐 12:00–16:00", "🕐 16:00–20:00", "📞 Другое время / срочно", "⬅️ Другой день"]
+
+
+def test_same_key_ignores_cosmetics_but_not_flags():
+    from app.parser import same_key
+    assert same_key("18 Pro 256 Black", "🇯🇵🇺🇸(e sim)") == same_key("18 Pro 256 Black", "🇯🇵🇺🇸(е sim")  # русская «е»
+    assert same_key("18 Pro 1Tb Black", "🇺🇸(e sim)актив 🔥") == same_key("18 Pro 1TB Black ", "🇺🇸 e sim актив 🔥")
+    assert same_key("x", "🇺🇸e sim") != same_key("x", "e sim")                     # пропали флаги — это изменение
+    assert same_key("x", "🇰🇷🇭🇰(1 sim+e sim)") != same_key("x", "🇯🇵🇺🇸(e sim)")  # другая версия
+
+
+def test_collector_run_lock(tmp_path):
+    import collector_win as cw
+    cw.RunLock.path = tmp_path / "collector.lock"
+    with cw.RunLock():
+        with pytest.raises(cw.Busy):  # сборщик по расписанию и по запросу не работают одновременно
+            with cw.RunLock():
+                pass
+    assert not cw.RunLock.path.exists()

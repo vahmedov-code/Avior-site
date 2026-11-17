@@ -4,7 +4,7 @@ import sqlite3
 import time
 from dataclasses import dataclass
 
-from .parser import Section
+from .parser import Section, same_key
 from .platforms import WA_BASE
 from .pricing import apply_markup
 
@@ -317,15 +317,20 @@ class DB:
         """Полностью заменяет прайс категории и возвращает, что изменилось."""
         # Сравниваем по названию и примечанию, без раздела: если поставщик переименовал
         # заголовок раздела, товар не «пропал и появился», а остался тем же.
-        old = {}
+        # Подписи сравниваем «по смыслу» (same_key): «(е sim)» и «(e sim)» — одна и та же позиция.
+        old, labels = {}, {}
         for r in self.items(cat_id):
-            old[(r["name"], r["note"])] = r["base_price"]
+            key = same_key(r["name"], r["note"])
+            old[key] = r["base_price"]
+            labels[key] = (r["name"], r["note"])
 
         new = {}
         rows = []
         for s in sections:
             for it in s.items:
-                new[(it.name, it.note)] = it.price
+                key = same_key(it.name, it.note)
+                new[key] = it.price
+                labels[key] = (it.name, it.note)
                 rows.append((cat_id, s.title, it.name, it.note, it.price, len(rows)))
 
         with self.conn:
@@ -338,9 +343,9 @@ class DB:
         return ImportDiff(
             total=len(rows),
             previous=len(old),
-            added=[(_item_label("", *k), p) for k, p in new.items() if k not in old],
-            removed=[(_item_label("", *k), p) for k, p in old.items() if k not in new],
-            changed=[(_item_label("", *k), old[k], p) for k, p in new.items() if k in old and old[k] != p],
+            added=[(_item_label("", *labels[k]), p) for k, p in new.items() if k not in old],
+            removed=[(_item_label("", *labels[k]), p) for k, p in old.items() if k not in new],
+            changed=[(_item_label("", *labels[k]), old[k], p) for k, p in new.items() if k in old and old[k] != p],
         )
 
     def guess_category(self, sections: list[Section]) -> int | None:

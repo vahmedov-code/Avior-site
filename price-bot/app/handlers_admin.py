@@ -2,6 +2,7 @@
 import html
 import io
 import json
+import time
 from datetime import date, datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -31,6 +32,7 @@ from .parser import count_items, parse_post
 from .pricing import apply_markup, fmt_price
 from .rules import filter_sections
 from .stats import format_stats, format_users
+from .collected_import import LAST_SETTING, REQUEST_SETTING
 from .collected_import import handle as handle_collected
 from .telegram_export import load_any
 
@@ -39,6 +41,7 @@ router = Router(name="admin")
 HELP = """<b>Управление ботом</b>
 
 <b>Обновить цены:</b>
+/prices — обновить цены сейчас (сборщик на Windows-сервере запустится в течение 5 минут)
 • перешлите сюда пост с прайсом из группы поставщика — бот спросит категорию (один раз) и запомнит;
 • или отправьте файл экспорта группы <code>result.json</code> (или <code>catalog.json</code> из manage.py) — обновятся все категории сразу.
 /excel — выгрузить текущий прайс в Excel
@@ -640,6 +643,42 @@ async def on_emoji(message: Message, state: FSMContext, db: DB, cfg: Config):
     problem = emoji_problem(db)  # первая страница только что ушла — знаем, принял ли Telegram значки
     if problem:
         await message.answer(problem.strip())
+
+
+def prices_screen(db: DB, cfg: Config) -> tuple[str, InlineKeyboardMarkup]:
+    tz = ZoneInfo(cfg.timezone)
+    last = db.get_setting(LAST_SETTING)
+    pending = db.get_setting(REQUEST_SETTING)
+    lines = ["🔄 <b>Обновление цен</b>", ""]
+    lines.append("Последняя проверка сборщиком: "
+                 + (datetime.fromtimestamp(int(last), tz).strftime("%d.%m %H:%M") if last else "ещё не было"))
+    lines.append("По расписанию: каждый день в 11:10 и 23:50.")
+    if pending:
+        since = datetime.fromtimestamp(int(pending), tz).strftime("%H:%M")
+        lines += ["", f"⏳ Запрос отправлен в {since} — сборщик на Windows-сервере начнёт в течение 5 минут, "
+                      "через 2–5 минут после этого придёт отчёт."]
+    lines += ["", "Можно и без сборщика: отправьте сюда файл экспорта канала <code>result.json</code>."]
+    b = InlineKeyboardBuilder()
+    if not pending:
+        b.button(text="🔄 Обновить цены сейчас", callback_data="prices:run")
+    else:
+        b.button(text="✖ Отменить запрос", callback_data="prices:cancel")
+    return "\n".join(lines), b.as_markup()
+
+
+@router.message(Command("prices"))
+async def cmd_prices(message: Message, db: DB, cfg: Config):
+    text, markup = prices_screen(db, cfg)
+    await message.answer(text, reply_markup=markup)
+
+
+@router.callback_query(F.data.in_({"prices:run", "prices:cancel"}))
+async def cb_prices(call: CallbackQuery, db: DB, cfg: Config):
+    run = call.data == "prices:run"
+    db.set_setting(REQUEST_SETTING, int(time.time()) if run else "")
+    text, markup = prices_screen(db, cfg)
+    await call.message.edit_text(text, reply_markup=markup)
+    await call.answer("Запрос отправлен сборщику" if run else "Запрос отменён")
 
 
 @router.callback_query(F.data == "collect:apply")

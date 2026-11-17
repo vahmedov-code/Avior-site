@@ -6,6 +6,7 @@ from dataclasses import dataclass
 
 from .config import Config
 from .db import DB, ImportDiff
+from .parser import same_key
 from .rules import is_accessory
 from .telegram_export import Catalog, supplier_info
 
@@ -111,11 +112,12 @@ def preview_removals(db: DB, catalog: Catalog) -> tuple[int, list[tuple[str, str
     for c in catalog.categories:
         cat = _existing_category(db, catalog, c)
         # без раздела — как в DB.replace_items
-        old = {(r["name"], r["note"]) for r in db.items(cat["id"])} if cat else set()
-        new = {(it.name, it.note) for s in c.sections for it in s.items}
+        # сравнение «по смыслу» — как в DB.replace_items (same_key), показываем исходные подписи
+        old = {same_key(r["name"], r["note"]): (r["name"], r["note"]) for r in db.items(cat["id"])} if cat else {}
+        new = {same_key(it.name, it.note): (it.name, it.note) for s in c.sections for it in s.items}
         previous += len(old)
-        removed += sorted(old - new)
-        added += sorted(new - old)
+        removed += sorted(old[k] for k in old.keys() - new.keys())
+        added += sorted(new[k] for k in new.keys() - old.keys())
     return previous, removed, added
 
 

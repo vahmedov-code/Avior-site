@@ -147,6 +147,19 @@ copy collector.env.example collector.env
 .venv\Scripts\python collector_win.py run --report
 ```
 
+**Обновление цен по кнопке из бота** (`/prices` → «🔄 Обновить цены сейчас»): бот запоминает запрос,
+а задача Планировщика «AVIOR сборщик по запросу» каждые 5 минут запускает `collector_win.py watch` —
+без запроса он сразу завершается, с запросом запускает сборщик и присылает отчёт. Создать задачу
+с теми же настройками, что у «AVIOR сборщик» (PowerShell от администратора):
+
+```powershell
+$t = Get-ScheduledTask -TaskName "AVIOR сборщик"
+$a = New-ScheduledTaskAction -Execute $t.Actions[0].Execute -WorkingDirectory $t.Actions[0].WorkingDirectory `
+     -Argument ($t.Actions[0].Arguments -replace '\brun\b.*$', 'watch')
+$tr = New-ScheduledTaskTrigger -Once -At (Get-Date).AddMinutes(1) -RepetitionInterval (New-TimeSpan -Minutes 5)
+Register-ScheduledTask -TaskName "AVIOR сборщик по запросу" -Action $a -Trigger $tr -Principal $t.Principal -Settings $t.Settings
+```
+
 ## Запуск
 
 1. Создайте бота у [@BotFather](https://t.me/BotFather) (`/newbot`) со своего основного аккаунта,

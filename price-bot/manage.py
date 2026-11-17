@@ -14,6 +14,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from datetime import date
 
 from app.catalog_import import catalog_filters, import_catalog, remember_supplier, supplier
@@ -118,11 +119,12 @@ def cmd_import_collected(args, cfg: Config) -> None:
     from aiogram.types import BufferedInputFile, InlineKeyboardButton, InlineKeyboardMarkup
 
     from app.alerts import send_price_alerts
-    from app.collected_import import handle
+    from app.collected_import import LAST_SETTING, handle
 
     bot_cfg = Config.from_env()
     with open(args.file, encoding="utf-8") as f:
         text, photo, confirm = handle(bot_db(bot_cfg), bot_cfg, json.load(f), args.report)
+    bot_db(bot_cfg).set_setting(LAST_SETTING, int(time.time()))  # для /prices: «последняя проверка»
     print(text or "Изменений нет.")
     # защита от сбоя чтения сработала — владелец решает кнопкой (бот применит этот же файл)
     markup = InlineKeyboardMarkup(inline_keyboard=[[
@@ -143,6 +145,16 @@ def cmd_import_collected(args, cfg: Config) -> None:
             await bot.session.close()
 
     asyncio.run(send())
+
+
+def cmd_collect_request(args, cfg: Config) -> None:
+    """Для сборщика (collector_win.py watch): есть ли запрос из бота. --take — забрать его."""
+    from app.collected_import import REQUEST_SETTING
+    db = bot_db(cfg)
+    pending = db.get_setting(REQUEST_SETTING)
+    if args.take and pending:
+        db.set_setting(REQUEST_SETTING, "")
+    print("run" if pending else "idle")
 
 
 def cmd_max_check(args, cfg: Config) -> None:
@@ -199,6 +211,9 @@ def main() -> None:
     p.add_argument("file")
     p.add_argument("--report", action="store_true", help="прислать отчёт, даже если ничего не изменилось")
     p.set_defaults(func=cmd_import_collected)
+    p = sub.add_parser("collect-request", help="для сборщика: есть ли запрос «обновить цены сейчас» из бота")
+    p.add_argument("--take", action="store_true", help="забрать запрос (сборщик начинает работу)")
+    p.set_defaults(func=cmd_collect_request)
     p = sub.add_parser("max-check", help="проверить связь с API MAX и токен бота")
     p.set_defaults(func=cmd_max_check)
     args = parser.parse_args()
